@@ -11,7 +11,7 @@
 
 ---
 
-When you run several Claude Code sessions at once, it is hard to tell which one is thinking, which one is done and which one is waiting for you. Claude Eyes gives each session a pair of robot eyes, in the spirit of little desk robots: they focus while Claude writes code, look around while it reads, get nervous during tests, smile when the turn is over and turn orange when a session needs you.
+When you run several Claude Code sessions at once, it is hard to tell which one is thinking, which one is done and which one is waiting for you. Claude Eyes gives each session a pair of robot eyes, in the spirit of Cozmo, Vector or Emo: they focus while Claude writes code, look around while it reads, get nervous during tests, smile when the turn is over and turn orange when a session needs you.
 
 ![Expressions](docs/expressions.png)
 
@@ -141,4 +141,4 @@ Then remove the `claude-state.sh` entries from the `hooks` section of `~/.claude
 
 [MIT](LICENSE) © 2026 Anselme SDR
 
-Claude Eyes is an independent project, not affiliated with, endorsed or sponsored by Anthropic. Claude and Claude Code are trademarks of Anthropic.
+Claude Eyes is an independent project, not affiliated with, endorsed or sponsored by Anthropic, Digital Dream Labs or Living AI. Claude and Claude Code are trademarks of Anthropic; Cozmo and Vector of Digital Dream Labs; Emo of Living AI.
