@@ -32,6 +32,14 @@ if [ "${1:-}" = "--install" ]; then
   mkdir -p "$HOME/Applications"
   rm -rf "$HOME/Applications/$appName.app"
   cp -R "$app" "$HOME/Applications/"
-  open "$HOME/Applications/$appName.app"
+  # LaunchServices may still be forgetting the old instance: retry instead of failing with -600
+  for attempt in 1 2 3 4 5; do
+    open "$HOME/Applications/$appName.app" 2> /dev/null && break
+    if [ "$attempt" -eq 5 ]; then
+      echo "Could not launch ~/Applications/$appName.app" >&2
+      exit 1
+    fi
+    sleep 0.5
+  done
   echo "Installed and launched ~/Applications/$appName.app"
 fi
