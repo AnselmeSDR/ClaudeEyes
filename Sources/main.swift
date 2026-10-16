@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dockHelpers: DockHelperManager!
     private var status: StatusMenuController!
     private var prefsObserver: AnyCancellable?
+    /// settings.json is only touched when the setting actually changes (and once at launch)
+    private var lastProgressBar: Bool?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
@@ -45,15 +47,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dockHelpers.sync()
     }
 
-    /// The hook reads this flag: no file, no tab progress bar
+    /// The hook reads this flag: no file, no tab progress bar. Claude Code's own bar takes over when ours is off.
     private func applyProgressBar() {
+        let enabled = Prefs.shared.progressBar
         let flag = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/eyes/progress-disabled")
-        if Prefs.shared.progressBar {
+        if enabled {
             try? FileManager.default.removeItem(at: flag)
         } else {
             try? FileManager.default.createDirectory(at: flag.deletingLastPathComponent(), withIntermediateDirectories: true)
             FileManager.default.createFile(atPath: flag.path, contents: nil)
         }
+        guard enabled != lastProgressBar else { return }
+        lastProgressBar = enabled
+        ClaudeSettings.syncProgressBar(oursEnabled: enabled)
     }
 
     /// The main icon is hidden when each session has its own

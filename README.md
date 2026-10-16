@@ -74,7 +74,7 @@ cd ClaudeEyes
 hooks/install.sh         # links the hook and registers it in ~/.claude/settings.json
 ```
 
-`hooks/install.sh` backs up your settings to `~/.claude/settings.json.bak-claude-eyes`, links `~/.claude/hooks/claude-state.sh` to the repository copy and turns off Claude Code's own terminal progress bar (`terminalProgressBarEnabled: false`), which the hook replaces in Ghostty and iTerm2.
+`hooks/install.sh` backs up your settings to `~/.claude/settings.json.bak-claude-eyes`, links `~/.claude/hooks/claude-state.sh` to the repository copy and turns off Claude Code's own terminal progress bar (`terminalProgressBarEnabled: false`), which the hook replaces in Ghostty and iTerm2. Turning the hook's bar off in the settings gives Claude Code its own bar back.
 
 Running sessions show up right away; they wake up at their next event. The first click on a face asks for permission to control your terminal app.
 
@@ -90,7 +90,7 @@ To start the app at login, open **Settings** from the menu bar icon and enable *
 | WezTerm | Exact pane | No |
 | VS Code, Cursor, Warp, kitty, others | The app comes to the front | No |
 
-The terminal of each session is detected automatically, from its process tree; sessions inside tmux bring back the terminal app they were started from. The progress bar is only sent to the terminals where Claude Code itself enables it: elsewhere the same escape sequence can show up as a notification. Turn it off in **Settings → Terminal**; in Ghostty, `progress-style = false` hides every progress bar, whatever the app.
+The terminal of each session is detected automatically, from its process tree; sessions inside tmux bring back the terminal app they were started from. The progress bar is only sent to the terminals where Claude Code itself enables it: elsewhere the same escape sequence can show up as a notification. Turn it off in **Settings → Terminal** and Claude Code's own bar comes back; in Ghostty, `progress-style = false` hides every progress bar, whatever the app.
 
 ## Settings
 
@@ -135,7 +135,7 @@ rm ~/.claude/hooks/claude-state.sh
 defaults delete com.anselme.claude-eyes
 ```
 
-Then remove the `claude-state.sh` entries from the `hooks` section of `~/.claude/settings.json` (or restore `settings.json.bak-claude-eyes`) and set `terminalProgressBarEnabled` back to `true` if you want Claude Code's progress bar again.
+Then remove the `claude-state.sh` entries from the `hooks` section of `~/.claude/settings.json` (or restore `settings.json.bak-claude-eyes`) and the `terminalProgressBarEnabled` line if you want Claude Code's progress bar again (turning the bar off in the settings before uninstalling does it for you).
 
 ## License
 

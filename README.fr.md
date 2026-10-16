@@ -74,7 +74,7 @@ cd ClaudeEyes
 hooks/install.sh         # crée le lien vers le hook et l'enregistre dans ~/.claude/settings.json
 ```
 
-`hooks/install.sh` sauvegarde tes réglages dans `~/.claude/settings.json.bak-claude-eyes`. Il fait de `~/.claude/hooks/claude-state.sh` un lien vers la copie du dépôt et désactive la barre de progression propre à Claude Code (`terminalProgressBarEnabled: false`), que le hook remplace dans Ghostty et iTerm2.
+`hooks/install.sh` sauvegarde tes réglages dans `~/.claude/settings.json.bak-claude-eyes`. Il fait de `~/.claude/hooks/claude-state.sh` un lien vers la copie du dépôt et désactive la barre de progression propre à Claude Code (`terminalProgressBarEnabled: false`), que le hook remplace dans Ghostty et iTerm2. Désactiver la barre du hook dans les réglages rend sa barre à Claude Code.
 
 Les sessions déjà ouvertes apparaissent tout de suite et se réveillent à leur prochain événement. Au premier clic sur un visage, macOS demande l'autorisation de contrôler ton app de terminal.
 
@@ -90,7 +90,7 @@ Pour lancer l'app à l'ouverture de session, ouvre les **Réglages** depuis l'ic
 | WezTerm | Panneau exact | Non |
 | VS Code, Cursor, Warp, kitty, autres | L'app passe au premier plan | Non |
 
-Le terminal de chaque session est détecté automatiquement, à partir de la chaîne des processus. Pour une session lancée dans tmux, le clic ramène l'app de terminal depuis laquelle elle a été démarrée. La barre de progression n'est envoyée qu'aux terminaux pour lesquels Claude Code l'active lui-même : ailleurs, la même séquence peut s'afficher comme une notification. Elle se désactive dans **Réglages → Terminal**. Dans Ghostty, `progress-style = false` masque toutes les barres, quelle que soit l'app.
+Le terminal de chaque session est détecté automatiquement, à partir de la chaîne des processus. Pour une session lancée dans tmux, le clic ramène l'app de terminal depuis laquelle elle a été démarrée. La barre de progression n'est envoyée qu'aux terminaux pour lesquels Claude Code l'active lui-même : ailleurs, la même séquence peut s'afficher comme une notification. Elle se désactive dans **Réglages → Terminal**, et la barre de Claude Code reprend alors sa place. Dans Ghostty, `progress-style = false` masque toutes les barres, quelle que soit l'app.
 
 ## Réglages
 
@@ -135,7 +135,7 @@ rm ~/.claude/hooks/claude-state.sh
 defaults delete com.anselme.claude-eyes
 ```
 
-Retire ensuite les entrées `claude-state.sh` de la section `hooks` de `~/.claude/settings.json` (ou restaure `settings.json.bak-claude-eyes`), et remets `terminalProgressBarEnabled` à `true` si tu veux retrouver la barre de progression de Claude Code.
+Retire ensuite les entrées `claude-state.sh` de la section `hooks` de `~/.claude/settings.json` (ou restaure `settings.json.bak-claude-eyes`), ainsi que la ligne `terminalProgressBarEnabled` si tu veux retrouver la barre de progression de Claude Code (désactiver la barre dans les réglages avant de désinstaller le fait pour toi).
 
 ## Licence
 

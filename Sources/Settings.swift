@@ -171,7 +171,7 @@ struct SettingsView: View {
             Section("Terminal") {
                 LabeledContent("Terminaux détectés", value: detectedTerminals)
                 Toggle("Barre de progression dans l'onglet", isOn: $prefs.progressBar)
-                Text("Seulement dans Ghostty 1.2+ et iTerm2 3.6.6+, les terminaux où Claude Code l'active aussi. Elle remplace la barre de Claude Code, qui disparaît pendant les longues réflexions. Dans Ghostty, progress-style = false masque toutes les barres, quelle que soit l'app.")
+                Text("Seulement dans Ghostty 1.2+ et iTerm2 3.6.6+, les terminaux où Claude Code l'active aussi. Elle remplace la barre de Claude Code, qui disparaît pendant les longues réflexions ; désactivée, celle de Claude Code reprend sa place. Dans Ghostty, progress-style = false masque toutes les barres, quelle que soit l'app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
