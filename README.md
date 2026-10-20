@@ -21,7 +21,7 @@ When you run several Claude Code sessions at once, it is hard to tell which one 
 - **Dock**: either one animated icon showing the session that matters most (badge = sessions waiting for you), or **one Dock icon per session**, named after the session.
 - **Menu bar**: a static icon listing every session, the floating panel toggle and the settings.
 - **Your names and colors**: the title set with `/rename` and the color set with `/color` in Claude Code are picked up automatically. Calm moods use the session color, alerts keep theirs (orange waiting, red error, green done) and pulse so you never miss them.
-- **Sounds**: a short robot chirp when a session starts waiting for you or finishes its turn (a sad one on an error). Mute any session from the menu bar, a right-click on its eyes or its Dock icon.
+- **Sounds**: a short robot chirp when a session starts waiting for you or finishes its turn (a sad one on an error). Mute every sound or any single session from the menu bar, a right-click on its eyes or its Dock icon.
 - **Every session found**: sessions are reported by a Claude Code hook; running sessions that have not triggered any hook yet are found in the process table and shown asleep.
 - **Works with your terminal**: clicking a face brings back the exact tab of that session in Ghostty, Terminal, iTerm2 and WezTerm, and brings any other terminal app to the front. In Ghostty and iTerm2, the tab's progress bar follows Claude's state: it no longer disappears during long thinking, and stays orange as long as a session waits for your answer.
 - **Light**: GPU-rendered faces, about 1% CPU for the app and 0.5 to 2% per Dock icon.

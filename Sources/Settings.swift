@@ -29,6 +29,7 @@ final class Prefs: ObservableObject {
     @Published var soundWhenDone: Bool { didSet { defaults.set(soundWhenDone, forKey: "soundWhenDone") } }
     @Published var soundWhenFailed: Bool { didSet { defaults.set(soundWhenFailed, forKey: "soundWhenFailed") } }
     @Published var soundVolume: Double { didSet { defaults.set(soundVolume, forKey: "soundVolume") } }
+    @Published var muteAll: Bool { didSet { defaults.set(muteAll, forKey: "muteAll") } }
 
     // Muted sessions are read and written straight from the defaults: Dock helpers change them too
     func isSoundOn(for sessionId: String) -> Bool {
@@ -64,6 +65,7 @@ final class Prefs: ObservableObject {
             "soundWhenDone": true,
             "soundWhenFailed": true,
             "soundVolume": 0.5,
+            "muteAll": false,
         ])
         showFloating = defaults.bool(forKey: "showFloating")
         clickThrough = defaults.bool(forKey: "clickThrough")
@@ -81,6 +83,7 @@ final class Prefs: ObservableObject {
         soundWhenDone = defaults.bool(forKey: "soundWhenDone")
         soundWhenFailed = defaults.bool(forKey: "soundWhenFailed")
         soundVolume = defaults.double(forKey: "soundVolume")
+        muteAll = defaults.bool(forKey: "muteAll")
     }
 }
 
@@ -163,7 +166,7 @@ struct SettingsView: View {
                     }
                     .frame(maxWidth: 220)
                 }
-                Text("Le son d'une session se coupe depuis la barre des menus (Son des sessions), un clic droit sur ses yeux ou son icône du Dock.")
+                Text("Tous les sons se coupent depuis la barre des menus (Couper le son). Le son d'une session se coupe depuis la barre des menus (Son des sessions), un clic droit sur ses yeux ou son icône du Dock.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

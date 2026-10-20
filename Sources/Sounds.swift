@@ -136,6 +136,6 @@ final class Sounds {
         let ids = Set(sessions.map(\.id))
         lastStates = lastStates.filter { ids.contains($0.key) }
         lastPlayed = lastPlayed.filter { ids.contains($0.key) }
-        if let chirp { play(chirp) }
+        if let chirp, !prefs.muteAll { play(chirp) }
     }
 }

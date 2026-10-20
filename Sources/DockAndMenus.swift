@@ -73,6 +73,10 @@ final class MenuActions: NSObject {
         Prefs.shared.setSound(sender.state != .on, for: id)
     }
 
+    @objc func toggleMuteAll(_ sender: Any?) {
+        Prefs.shared.muteAll.toggle()
+    }
+
     @objc func toggleFloating(_ sender: Any?) {
         Prefs.shared.showFloating.toggle()
     }
@@ -112,6 +116,11 @@ enum MenuFactory {
             menu.addItem(item)
         }
 
+        menu.addItem(.separator())
+        let mute = NSMenuItem(title: "Couper le son", action: #selector(MenuActions.toggleMuteAll(_:)), keyEquivalent: "")
+        mute.state = Prefs.shared.muteAll ? .on : .off
+        mute.target = actions
+        menu.addItem(mute)
         if !sessions.isEmpty {
             let sounds = NSMenu()
             for session in sessions {
@@ -119,7 +128,6 @@ enum MenuFactory {
             }
             let soundsItem = NSMenuItem(title: "Son des sessions", action: nil, keyEquivalent: "")
             soundsItem.submenu = sounds
-            menu.addItem(.separator())
             menu.addItem(soundsItem)
         }
 
