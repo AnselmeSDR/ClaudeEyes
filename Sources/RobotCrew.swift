@@ -219,6 +219,9 @@ final class RobotAgent {
     private var lastMood: Mood?
     private var mood = Mood.sleepy
     private var moodAt: CFTimeInterval = 0
+    private var sessionState: SessionState?
+    /// Shows the bubble until then, after its session changed state
+    private var bubbleUntil: CFTimeInterval = 0
     /// Walk run by the render server: target and stage origin it was computed for
     private var walkAnimation: (target: CGFloat, origin: CGPoint)?
     private var pendingSeed: UInt64?
@@ -370,6 +373,9 @@ final class RobotAgent {
         if t.now - moodAt > 0.2 {
             mood = session?.mood(at: t.wallNow) ?? .sleepy
             moodAt = t.now
+            let newState = session?.state
+            if let sessionState, let newState, newState != sessionState { bubbleUntil = t.now + 4 }
+            sessionState = newState
         }
         react(to: mood, t)
         step(mood, t)
@@ -792,7 +798,7 @@ final class RobotAgent {
     }
 
     /// Clicks only land on the robot itself: the rest of its window lets them through.
-    /// Hovering it, or waiting for you, shows its bubble.
+    /// Hovering it, waiting for you or a new state of its session shows its bubble.
     private func updatePointer(_ mood: Mood, _ t: Tick) {
         let bounds = worldBounds
         let carried: Bool = { if case .carried = state { return true } else { return false } }()
@@ -800,7 +806,7 @@ final class RobotAgent {
         let ignores = isLeaving || !(over || carried)
         if panel.ignoresMouseEvents != ignores { panel.ignoresMouseEvents = ignores }
 
-        guard let session, !isLeaving, !carried, rig.beam == 0, over || mood == .waiting else {
+        guard let session, !isLeaving, !carried, rig.beam == 0, over || mood == .waiting || t.now < bubbleUntil else {
             bubble.hide()
             return
         }
