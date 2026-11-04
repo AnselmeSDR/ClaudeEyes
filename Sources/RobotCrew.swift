@@ -215,6 +215,7 @@ final class RobotAgent {
     private var state: State = .beamIn(start: 0)
     private var facing: CGFloat = 1
     private var grab = CGVector.zero
+    private var justDropped = false
     private var lastMood: Mood?
     private var mood = Mood.sleepy
     private var moodAt: CFTimeInterval = 0
@@ -357,6 +358,7 @@ final class RobotAgent {
         guard case .carried = state else { return }
         func clamp(_ v: CGFloat) -> CGFloat { max(-900, min(900, v)) * 0.6 }
         state = .fall(CGVector(dx: clamp(velocity.dx), dy: clamp(velocity.dy)))
+        justDropped = hypot(velocity.dx, velocity.dy) < 300
     }
 
     // MARK: Update
@@ -465,6 +467,15 @@ final class RobotAgent {
             }
 
         case .fall(var velocity):
+            if justDropped {
+                justDropped = false
+                // Held by its body, its feet are below the edge it was dropped on: lands on it anyway
+                if let floor = t.world.landing(at: foot.x, below: foot.y + height * 0.8, clearance: height + 4, halfWidth: halfWidth),
+                   floor.y >= foot.y {
+                    land(on: floor, t)
+                    return
+                }
+            }
             velocity.dy -= Self.gravity * CGFloat(t.dt)
             let previousY = foot.y
             foot.x += velocity.dx * CGFloat(t.dt)
@@ -479,11 +490,7 @@ final class RobotAgent {
                 return
             }
             if velocity.dy <= 0, foot.y <= floor.y {
-                foot.y = floor.y
-                support = floor.support
-                if case .window(let id) = floor.support { perchFrame = t.world.window(id)?.frame }
-                state = .idle(until: t.now + Double.random(in: 1...3))
-                rig.land()
+                land(on: floor, t)
             } else {
                 state = .fall(velocity)
             }
@@ -529,6 +536,14 @@ final class RobotAgent {
                 goToUser(t)
             }
         }
+    }
+
+    private func land(on floor: RobotWorld.Surface, _ t: Tick) {
+        foot.y = floor.y
+        support = floor.support
+        if case .window(let id) = floor.support { perchFrame = t.world.window(id)?.frame }
+        state = .idle(until: t.now + Double.random(in: 1...3))
+        rig.land()
     }
 
     private func eased(_ elapsed: Double) -> CGFloat {
