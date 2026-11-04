@@ -820,6 +820,8 @@ final class RobotAgent {
 final class RobotPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+    // A stage can hang over another screen's menu bar: AppKit would push it below the bar, out of reach of its robot
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 /// Click: the session's terminal. Drag: picks the robot up. Right click: its menu.
