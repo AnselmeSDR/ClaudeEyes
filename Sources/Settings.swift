@@ -13,16 +13,12 @@ final class Prefs: ObservableObject {
         return UserDefaults(suiteName: mainId) ?? .standard
     }()
 
-    @Published var showFloating: Bool { didSet { defaults.set(showFloating, forKey: "showFloating") } }
-    @Published var clickThrough: Bool { didSet { defaults.set(clickThrough, forKey: "clickThrough") } }
-    @Published var faceScale: Double { didSet { defaults.set(faceScale, forKey: "faceScale") } }
-    @Published var showLabels: Bool { didSet { defaults.set(showLabels, forKey: "showLabels") } }
+    @Published var showRobots: Bool { didSet { defaults.set(showRobots, forKey: "showRobots") } }
+    @Published var robotsClimb: Bool { didSet { defaults.set(robotsClimb, forKey: "robotsClimb") } }
     @Published var hideWhenNoSession: Bool { didSet { defaults.set(hideWhenNoSession, forKey: "hideWhenNoSession") } }
     @Published var showDockIcon: Bool { didSet { defaults.set(showDockIcon, forKey: "showDockIcon") } }
     @Published var doneDuration: Double { didSet { defaults.set(doneDuration, forKey: "doneDuration") } }
     @Published var sleepAfterMinutes: Double { didSet { defaults.set(sleepAfterMinutes, forKey: "sleepAfterMinutes") } }
-    @Published var backgroundBlur: Bool { didSet { defaults.set(backgroundBlur, forKey: "backgroundBlur") } }
-    @Published var backgroundOpacity: Double { didSet { defaults.set(backgroundOpacity, forKey: "backgroundOpacity") } }
     @Published var dockPerSession: Bool { didSet { defaults.set(dockPerSession, forKey: "dockPerSession") } }
     @Published var progressBar: Bool { didSet { defaults.set(progressBar, forKey: "progressBar") } }
     @Published var soundWhenWaiting: Bool { didSet { defaults.set(soundWhenWaiting, forKey: "soundWhenWaiting") } }
@@ -47,18 +43,30 @@ final class Prefs: ObservableObject {
         defaults.set(muted.filter { !isGone($0) }, forKey: "mutedSessions")
     }
 
+    // Robots drawn again with "Nouveau robot", by session (UInt64 stored as text)
+    func robotSeed(for sessionId: String) -> UInt64? {
+        (defaults.dictionary(forKey: "robotSeeds")?[sessionId] as? String).flatMap { UInt64($0) }
+    }
+
+    func setRobotSeed(_ seed: UInt64, for sessionId: String) {
+        var seeds = defaults.dictionary(forKey: "robotSeeds") ?? [:]
+        seeds[sessionId] = String(seed)
+        defaults.set(seeds, forKey: "robotSeeds")
+    }
+
+    func forgetRobotSeeds(where isGone: (String) -> Bool) {
+        let seeds = defaults.dictionary(forKey: "robotSeeds") ?? [:]
+        defaults.set(seeds.filter { !isGone($0.key) }, forKey: "robotSeeds")
+    }
+
     private init() {
         defaults.register(defaults: [
-            "showFloating": true,
-            "clickThrough": false,
-            "faceScale": 1.0,
-            "showLabels": true,
+            "showRobots": true,
+            "robotsClimb": true,
             "hideWhenNoSession": false,
             "showDockIcon": true,
             "doneDuration": 8.0,
             "sleepAfterMinutes": 10.0,
-            "backgroundBlur": false,
-            "backgroundOpacity": 0.7,
             "dockPerSession": false,
             "progressBar": true,
             "soundWhenWaiting": true,
@@ -67,16 +75,12 @@ final class Prefs: ObservableObject {
             "soundVolume": 0.5,
             "muteAll": false,
         ])
-        showFloating = defaults.bool(forKey: "showFloating")
-        clickThrough = defaults.bool(forKey: "clickThrough")
-        faceScale = defaults.double(forKey: "faceScale")
-        showLabels = defaults.bool(forKey: "showLabels")
+        showRobots = defaults.bool(forKey: "showRobots")
+        robotsClimb = defaults.bool(forKey: "robotsClimb")
         hideWhenNoSession = defaults.bool(forKey: "hideWhenNoSession")
         showDockIcon = defaults.bool(forKey: "showDockIcon")
         doneDuration = defaults.double(forKey: "doneDuration")
         sleepAfterMinutes = defaults.double(forKey: "sleepAfterMinutes")
-        backgroundBlur = defaults.bool(forKey: "backgroundBlur")
-        backgroundOpacity = defaults.double(forKey: "backgroundOpacity")
         dockPerSession = defaults.bool(forKey: "dockPerSession")
         progressBar = defaults.bool(forKey: "progressBar")
         soundWhenWaiting = defaults.bool(forKey: "soundWhenWaiting")
@@ -115,25 +119,21 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Fenêtre flottante") {
-                Toggle("Afficher la fenêtre flottante", isOn: $prefs.showFloating)
-                Toggle("Laisser passer les clics", isOn: $prefs.clickThrough)
-                LabeledContent("Taille") {
-                    Slider(value: $prefs.faceScale, in: 0.6...1.8, step: 0.05)
-                        .frame(maxWidth: 220)
-                }
-                Toggle("Fond flouté derrière les yeux", isOn: $prefs.backgroundBlur)
-                if prefs.backgroundBlur {
-                    LabeledContent("Assombrissement du fond") {
-                        Slider(value: $prefs.backgroundOpacity, in: 0.2...1, step: 0.05)
-                            .frame(maxWidth: 220)
+            Section("Robots") {
+                Toggle("Afficher les robots", isOn: $prefs.showRobots)
+                Toggle("Grimper sur les fenêtres", isOn: $prefs.robotsClimb)
+                Toggle("Masquer quand aucune session n'est ouverte", isOn: $prefs.hideWhenNoSession)
+                HStack {
+                    Button("Rappeler les robots") {
+                        AppDelegate.shared?.robots.recall()
+                    }
+                    Button("Labo des robots") {
+                        RobotLab.shared.show()
                     }
                 }
-                Toggle("Afficher le projet et l'activité sous les yeux", isOn: $prefs.showLabels)
-                Toggle("Masquer quand aucune session n'est ouverte", isOn: $prefs.hideWhenNoSession)
-                Button("Replacer en bas à droite de l'écran") {
-                    AppDelegate.shared?.floating.resetPosition()
-                }
+                Text("Un robot par session. Un clic ouvre son terminal, un glisser le déplace (il retombe là où tu le lâches), un clic droit ouvre son menu, avec « Nouveau robot ». Survole-le pour voir sa session.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Dock") {
@@ -146,7 +146,7 @@ struct SettingsView: View {
                 .disabled(!prefs.showDockIcon)
                 Text(prefs.dockPerSession
                      ? "Un clic sur l'icône d'une session ouvre son terminal. Un « ! » signale qu'elle attend ta réponse."
-                     : "Un clic sur l'icône affiche ou masque la fenêtre flottante. La pastille compte les sessions qui attendent ta réponse.")
+                     : "Un clic sur l'icône affiche ou masque les robots. La pastille compte les sessions qui attendent ta réponse.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -166,7 +166,7 @@ struct SettingsView: View {
                     }
                     .frame(maxWidth: 220)
                 }
-                Text("Tous les sons se coupent depuis la barre des menus (Couper le son). Le son d'une session se coupe depuis la barre des menus (Son des sessions), un clic droit sur ses yeux ou son icône du Dock.")
+                Text("Tous les sons se coupent depuis la barre des menus (Couper le son). Le son d'une session se coupe depuis la barre des menus (Son des sessions), un clic droit sur son robot ou son icône du Dock.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -11,22 +11,26 @@
 
 ---
 
-When you run several Claude Code sessions at once, it is hard to tell which one is thinking, which one is done and which one is waiting for you. Claude Eyes gives each session a pair of robot eyes, in the spirit of Cozmo, Vector or Emo: they focus while Claude writes code, look around while it reads, get nervous during tests, smile when the turn is over and turn orange when a session needs you.
+When you run several Claude Code sessions at once, it is hard to tell which one is thinking, which one is done and which one is waiting for you. Claude Eyes gives each session its own little robot, randomly built, with robot eyes in the spirit of Cozmo, Vector or Emo: they focus while Claude writes code, look around while it reads, get nervous during tests, smile when the turn is over and turn orange when a session needs you.
 
 ![Expressions](docs/expressions.png)
 
 ## Features
 
-- **Floating eyes**: a borderless transparent panel with one face per session, the session title and what Claude is doing underneath. Drag it anywhere, click a face to jump to its terminal. Optional frosted glass background.
+- **Robots**: one robot per session, generated from a seed: tracks, wheels, legs, springs or hovering, head shape, antennas, ears, arms, colors... no two alike. They stroll at the bottom of every screen, climb the sides of windows that have room on top and walk on them, move from one screen to another, and fall asleep when their session does. When a session waits for you, its robot comes to the screen your pointer is on and jumps around. Click a robot to jump to its terminal, drag it to put it elsewhere (it falls where you drop it), right-click it for its menu (sound, a new robot). Hover it to see its session and what Claude is doing.
 - **Dock**: either one animated icon showing the session that matters most (badge = sessions waiting for you), or **one Dock icon per session**, named after the session.
-- **Menu bar**: a static icon listing every session, the floating panel toggle and the settings.
+- **Menu bar**: a static icon listing every session, showing or calling back the robots, the robot lab (random robots going through every motion) and the settings.
 - **Your names and colors**: the title set with `/rename` and the color set with `/color` in Claude Code are picked up automatically. Calm moods use the session color, alerts keep theirs (orange waiting, red error, green done) and pulse so you never miss them.
-- **Sounds**: a short robot chirp when a session starts waiting for you or finishes its turn (a sad one on an error). Mute every sound or any single session from the menu bar, a right-click on its eyes or its Dock icon.
+- **Sounds**: a short robot chirp when a session starts waiting for you or finishes its turn (a sad one on an error). Mute every sound or any single session from the menu bar, a right-click on its robot or its Dock icon.
 - **Every session found**: sessions are reported by a Claude Code hook; running sessions that have not triggered any hook yet are found in the process table and shown asleep.
-- **Works with your terminal**: clicking a face brings back the exact tab of that session in Ghostty, Terminal, iTerm2 and WezTerm, and brings any other terminal app to the front. In Ghostty and iTerm2, the tab's progress bar follows Claude's state: it no longer disappears during long thinking, and stays orange as long as a session waits for your answer.
-- **Light**: GPU-rendered faces, about 1% CPU for the app and 0.5 to 2% per Dock icon.
+- **Works with your terminal**: clicking a robot brings back the exact tab of that session in Ghostty, Terminal, iTerm2 and WezTerm, and brings any other terminal app to the front. In Ghostty and iTerm2, the tab's progress bar follows Claude's state: it no longer disappears during long thinking, and stays orange as long as a session waits for your answer.
+- **Light**: robots and faces drawn by the GPU, walks run by the render server, window positions read only while a robot stands on a window: about 2 to 3% CPU for the app with three robots, and 0.5 to 2% per Dock icon.
 
 ![Session colors](docs/colors.png)
+
+![Robots](docs/robots.png)
+
+*A few robots out of the generator.*
 
 *Calm moods take the `/color` of the session; the last row is a session waiting for you: it stays orange and pulses.*
 
@@ -96,7 +100,7 @@ The terminal of each session is detected automatically, from its process tree; s
 
 Open them from the menu bar icon (**Réglages…**):
 
-- **Floating panel**: show or hide, click-through, size, labels, hide when no session, frosted background and its darkness, reset position.
+- **Robots**: show or hide, climbing windows on or off, hide when no session, call them back to the current screen, the robot lab.
 - **Dock**: animated icon on or off, one icon for the most important session or one icon per session.
 - **Behavior**: how long the happy face stays after a turn, after how long a session falls asleep.
 - **Sounds**: when a session waits for you, when it is done, when it stops on an error, volume.
@@ -122,6 +126,8 @@ Open them from the menu bar icon (**Réglages…**):
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-gallery build/gallery.png      # every expression
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-color-tiles build/colors.png   # every /color
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-sounds build/sounds           # every sound, as WAV
+"build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-robots build/robots.png         # 30 random robots
+"build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --robot-lab                             # animated robots, alone
 ```
 
 Plain Swift compiled with `swiftc` (AppKit, SwiftUI, Core Animation), no Xcode project. See [CLAUDE.md](CLAUDE.md) for the architecture.

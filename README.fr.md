@@ -11,22 +11,26 @@
 
 ---
 
-Quand plusieurs sessions Claude Code tournent en même temps, difficile de savoir laquelle réfléchit, laquelle a fini et laquelle t'attend. Claude Eyes donne à chaque session une paire d'yeux de robot, dans l'esprit de Cozmo, Vector ou Emo : ils se concentrent quand Claude écrit du code, regardent autour d'eux quand il lit, deviennent nerveux pendant les tests, sourient quand il a fini et passent à l'orange quand une session a besoin de toi.
+Quand plusieurs sessions Claude Code tournent en même temps, difficile de savoir laquelle réfléchit, laquelle a fini et laquelle t'attend. Claude Eyes donne à chaque session son petit robot, construit au hasard, avec des yeux de robot dans l'esprit de Cozmo, Vector ou Emo : ils se concentrent quand Claude écrit du code, regardent autour d'eux quand il lit, deviennent nerveux pendant les tests, sourient quand il a fini et passent à l'orange quand une session a besoin de toi.
 
 ![Expressions](docs/expressions.png)
 
 ## Fonctionnalités
 
-- **Yeux flottants** : une fenêtre transparente sans bordure, avec un visage par session, son titre et ce que fait Claude en dessous. Elle se déplace à la souris, et un clic sur un visage ouvre le terminal de la session. Fond en verre dépoli en option.
+- **Robots** : un robot par session, tiré d'une graine : chenilles, roues, pattes, ressort ou lévitation, forme de tête, antennes, oreilles, bras, couleurs… aucun n'est pareil. Ils se baladent en bas de chaque écran, grimpent le long des fenêtres qui ont de la place au-dessus et marchent dessus, passent d'un écran à l'autre et s'endorment avec leur session. Quand une session t'attend, son robot vient sur l'écran où se trouve ta souris et sautille. Un clic sur un robot ouvre le terminal de sa session, un glisser le déplace (il retombe là où tu le lâches), un clic droit ouvre son menu (son, nouveau robot). Survole-le pour voir sa session et ce que fait Claude.
 - **Dock** : soit une icône animée qui montre la session la plus importante (la pastille compte les sessions qui t'attendent), soit **une icône par session**, au nom de la session.
-- **Barre des menus** : une icône fixe qui liste les sessions, affiche ou masque la fenêtre flottante et ouvre les réglages.
+- **Barre des menus** : une icône fixe qui liste les sessions, affiche ou rappelle les robots, ouvre le labo des robots (des robots au hasard qui enchaînent tous leurs mouvements) et les réglages.
 - **Tes noms et tes couleurs** : le titre donné avec `/rename` et la couleur choisie avec `/color` dans Claude Code sont repris automatiquement. Les états calmes prennent la couleur de la session, les alertes gardent la leur (orange pour l'attente, rouge pour une erreur, vert quand c'est fini) et clignotent pour ne jamais passer inaperçues.
-- **Sons** : un petit bip de robot quand une session commence à t'attendre ou termine sa réponse (un son triste en cas d'erreur). Tous les sons se coupent depuis la barre des menus (Couper le son), celui de chaque session depuis la barre des menus, un clic droit sur ses yeux ou son icône du Dock.
+- **Sons** : un petit bip de robot quand une session commence à t'attendre ou termine sa réponse (un son triste en cas d'erreur). Tous les sons se coupent depuis la barre des menus (Couper le son), celui de chaque session depuis la barre des menus, un clic droit sur son robot ou son icône du Dock.
 - **Toutes les sessions** : chaque session est signalée par un hook de Claude Code. Celles qui tournent sans avoir encore déclenché de hook sont repérées dans la liste des processus et affichées endormies.
-- **Compatible avec ton terminal** : un clic sur un visage ramène exactement l'onglet de la session dans Ghostty, Terminal, iTerm2 et WezTerm, et met au premier plan n'importe quelle autre app de terminal. Dans Ghostty et iTerm2, la barre de progression de l'onglet suit l'état de Claude : elle ne disparaît plus pendant les longues réflexions, et reste orange tant qu'une session attend ta réponse.
-- **Léger** : visages dessinés par la carte graphique, environ 1 % de CPU pour l'app et 0,5 à 2 % par icône du Dock.
+- **Compatible avec ton terminal** : un clic sur un robot ramène exactement l'onglet de la session dans Ghostty, Terminal, iTerm2 et WezTerm, et met au premier plan n'importe quelle autre app de terminal. Dans Ghostty et iTerm2, la barre de progression de l'onglet suit l'état de Claude : elle ne disparaît plus pendant les longues réflexions, et reste orange tant qu'une session attend ta réponse.
+- **Léger** : robots et visages dessinés par la carte graphique, marches animées par le serveur graphique, position des fenêtres lue seulement quand un robot est perché : environ 2 à 3 % de CPU pour l'app avec trois robots, et 0,5 à 2 % par icône du Dock.
 
 ![Couleurs des sessions](docs/colors.png)
+
+![Robots](docs/robots.png)
+
+*Quelques robots sortis du générateur.*
 
 *Les états calmes prennent la couleur `/color` de la session. La dernière ligne montre une session qui t'attend : elle reste orange et clignote.*
 
@@ -96,7 +100,7 @@ Le terminal de chaque session est détecté automatiquement, à partir de la cha
 
 Ils s'ouvrent depuis l'icône de la barre des menus (**Réglages…**) :
 
-- **Fenêtre flottante** : affichage, laisser passer les clics, taille, textes sous les yeux, masquage sans session, fond flouté et son assombrissement, position par défaut.
+- **Robots** : affichage, escalade des fenêtres, masquage sans session, rappel sur l'écran actuel, labo des robots.
 - **Dock** : icône animée ou non, une seule icône pour la session la plus importante ou une icône par session.
 - **Comportement** : durée de l'air content après une réponse, délai avant de s'endormir.
 - **Sons** : quand une session t'attend, quand elle a fini, quand elle s'arrête sur une erreur, volume.
@@ -122,6 +126,8 @@ Ils s'ouvrent depuis l'icône de la barre des menus (**Réglages…**) :
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-gallery build/gallery.png      # toutes les expressions
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-color-tiles build/colors.png   # toutes les couleurs /color
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-sounds build/sounds           # tous les sons, en WAV
+"build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-robots build/robots.png         # 30 robots au hasard
+"build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --robot-lab                             # robots animés, seuls
 ```
 
 Du Swift compilé avec `swiftc` (AppKit, SwiftUI, Core Animation), sans projet Xcode. L'architecture est décrite dans [CLAUDE.md](CLAUDE.md).

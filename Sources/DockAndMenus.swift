@@ -77,8 +77,21 @@ final class MenuActions: NSObject {
         Prefs.shared.muteAll.toggle()
     }
 
-    @objc func toggleFloating(_ sender: Any?) {
-        Prefs.shared.showFloating.toggle()
+    @objc func toggleRobots(_ sender: Any?) {
+        Prefs.shared.showRobots.toggle()
+    }
+
+    @objc func recallRobots(_ sender: Any?) {
+        AppDelegate.shared?.robots.recall()
+    }
+
+    @objc func rerollRobot(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        AppDelegate.shared?.robots.reroll(id)
+    }
+
+    @objc func openLab(_ sender: Any?) {
+        RobotLab.shared.show()
     }
 
     @objc func openSettings(_ sender: Any?) {
@@ -132,10 +145,19 @@ enum MenuFactory {
         }
 
         menu.addItem(.separator())
-        let toggle = NSMenuItem(title: "Afficher la fenêtre flottante", action: #selector(MenuActions.toggleFloating(_:)), keyEquivalent: "")
-        toggle.state = Prefs.shared.showFloating ? .on : .off
+        let toggle = NSMenuItem(title: "Afficher les robots", action: #selector(MenuActions.toggleRobots(_:)), keyEquivalent: "")
+        toggle.state = Prefs.shared.showRobots ? .on : .off
         toggle.target = actions
         menu.addItem(toggle)
+
+        let recall = NSMenuItem(title: "Rappeler les robots ici", action: #selector(MenuActions.recallRobots(_:)), keyEquivalent: "")
+        recall.target = actions
+        recall.isEnabled = Prefs.shared.showRobots
+        menu.addItem(recall)
+
+        let lab = NSMenuItem(title: "Labo des robots…", action: #selector(MenuActions.openLab(_:)), keyEquivalent: "")
+        lab.target = actions
+        menu.addItem(lab)
 
         let settings = NSMenuItem(title: "Réglages…", action: #selector(MenuActions.openSettings(_:)), keyEquivalent: ",")
         settings.target = actions
@@ -150,7 +172,7 @@ enum MenuFactory {
         }
     }
 
-    /// Right-click menu of a face in the floating panel
+    /// Right-click menu of a session's robot
     static func sessionMenu(for session: Session) -> NSMenu {
         let menu = NSMenu()
         let open = NSMenuItem(title: "Ouvrir le terminal", action: #selector(MenuActions.focusSession(_:)), keyEquivalent: "")
@@ -158,6 +180,10 @@ enum MenuFactory {
         open.target = MenuActions.shared
         menu.addItem(open)
         menu.addItem(soundItem(for: session, title: "Son pour cette session"))
+        let reroll = NSMenuItem(title: "Nouveau robot", action: #selector(MenuActions.rerollRobot(_:)), keyEquivalent: "")
+        reroll.representedObject = session.id
+        reroll.target = MenuActions.shared
+        menu.addItem(reroll)
         return menu
     }
 

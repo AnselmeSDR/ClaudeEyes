@@ -4,7 +4,7 @@ import Combine
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) static weak var shared: AppDelegate?
 
-    private(set) var floating: FloatingController!
+    private(set) var robots: RobotCrew!
     private var dock: DockTileController!
     private var dockHelpers: DockHelperManager!
     private var status: StatusMenuController!
@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SessionStore.shared.start()
         Sounds.shared.start()
         SessionLookStore.shared.start { SessionStore.shared.sessions.compactMap(\.record.pid) }
-        floating = FloatingController()
+        robots = RobotCrew()
         dock = DockTileController {
             let store = SessionStore.shared
             let now = Date().timeIntervalSince1970
@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyPrefs() {
         applyActivationPolicy()
         applyProgressBar()
-        floating.apply()
+        robots.apply()
         dockHelpers.sync()
     }
 
@@ -69,9 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
     }
 
-    // Clicking the Dock icon shows or hides the floating eyes
+    // Clicking the Dock icon shows or hides the robots
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        Prefs.shared.showFloating.toggle()
+        Prefs.shared.showRobots.toggle()
         return false
     }
 
@@ -107,10 +107,16 @@ if let dir = argument(after: "--render-sounds") {
     Sounds.write(to: dir)
     exit(0)
 }
+if let path = argument(after: "--render-robots") {
+    Snapshot.writeRobots(to: path)
+    exit(0)
+}
 
 let app = NSApplication.shared
 let delegate: NSApplicationDelegate
-if let sessionId = argument(after: "--dock-session") {
+if CommandLine.arguments.contains("--robot-lab") {
+    delegate = RobotLabDelegate()
+} else if let sessionId = argument(after: "--dock-session") {
     // Per-session Dock icon helper
     delegate = SessionDockDelegate(sessionId: sessionId, parentPid: pid_t(argument(after: "--parent") ?? "") ?? 0)
 } else {
