@@ -289,6 +289,27 @@ final class RobotRig {
         return layer
     }
 
+    /// Light from above: lighter top, darker bottom, drawn once into a bitmap clipped to the part
+    private func shading(_ path: CGPath) -> CALayer {
+        let box = path.boundingBoxOfPath
+        let layer = CALayer()
+        layer.frame = box
+        let scale: CGFloat = 3
+        guard let ctx = CGContext(data: nil, width: Int(ceil(box.width * scale)), height: Int(ceil(box.height * scale)), bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return layer }
+        ctx.scaleBy(x: scale, y: scale)
+        ctx.translateBy(x: -box.minX, y: -box.minY)
+        ctx.addPath(path)
+        ctx.clip()
+        let colors = [CGColor(gray: 1, alpha: 0.28), CGColor(gray: 1, alpha: 0), CGColor(gray: 0, alpha: 0), CGColor(gray: 0, alpha: 0.2)] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors, locations: [0, 0.45, 0.55, 1]) {
+            ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: box.maxY), end: CGPoint(x: 0, y: box.minY), options: [])
+        }
+        layer.contents = ctx.makeImage()
+        return layer
+    }
+
     /// Filled part with a darker outline
     private func part(_ path: CGPath, _ color: RobotColor, at p: CGPoint = .zero) -> CAShapeLayer {
         shape(path, fill: color.cg(), stroke: color.outline, at: p)
@@ -317,7 +338,7 @@ final class RobotRig {
 
         torso.position = CGPoint(x: 0, y: bodyY)
         hopper.addSublayer(torso)
-        let bw = g.bodySize.width, bh = g.bodySize.height
+        let bh = g.bodySize.height
 
         buildArms()
         let neckHeight: CGFloat
@@ -337,9 +358,9 @@ final class RobotRig {
             }
         }
 
-        torso.addSublayer(part(bodyPath(), g.bodyColor))
-        torso.addSublayer(shape(CGPath(ellipseIn: CGRect(x: -bw * 0.36, y: bh * 0.58, width: bw * 0.2, height: bh * 0.22), transform: nil),
-                                fill: CGColor(gray: 1, alpha: 0.3)))
+        let body = bodyPath()
+        torso.addSublayer(part(body, g.bodyColor))
+        torso.addSublayer(shading(body))
         buildChest()
 
         head.position = CGPoint(x: 0, y: bh + neckHeight)
@@ -613,8 +634,7 @@ final class RobotRig {
 
         let shell = headPath(CGRect(x: -hw / 2, y: 0, width: hw, height: hh), inset: 0)
         head.addSublayer(part(shell, g.headColor))
-        head.addSublayer(shape(capsule(CGRect(x: -hw / 2 + 7, y: hh - t / 2 - 0.9, width: hw * 0.28, height: 1.8)),
-                               fill: CGColor(gray: 1, alpha: g.headShape == .dome ? 0 : 0.35)))
+        head.addSublayer(shading(shell))
 
         let extraBottom: CGFloat = g.headShape == .crt ? 4 : 0
         let screenRect = CGRect(x: -hw / 2 + t, y: t + extraBottom, width: hw - 2 * t, height: hh - 2 * t - extraBottom)
