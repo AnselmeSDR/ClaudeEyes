@@ -145,6 +145,6 @@ Retire ensuite les entrées `claude-state.sh` de la section `hooks` de `~/.claud
 
 ## Licence
 
-[MIT](LICENSE) © 2026 Anselme SDR
+[AGPL-3.0](LICENSE) © 2026 Anselme SDR — libre d'utiliser, de modifier et de partager ; toute version modifiée, distribuée ou proposée en ligne doit rester open source sous la même licence. Une licence commerciale est disponible pour un usage en code fermé : anselme8@icloud.com.
 
 Claude Eyes est un projet indépendant, sans lien avec Anthropic, Digital Dream Labs ou Living AI, ni approuvé ou soutenu par eux. Claude et Claude Code sont des marques d'Anthropic, Cozmo et Vector de Digital Dream Labs, Emo de Living AI.

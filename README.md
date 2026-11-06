@@ -145,6 +145,6 @@ Then remove the `claude-state.sh` entries from the `hooks` section of `~/.claude
 
 ## License
 
-[MIT](LICENSE) © 2026 Anselme SDR
+[AGPL-3.0](LICENSE) © 2026 Anselme SDR — free to use, modify and share; any modified version that is distributed or offered as an online service must remain open source under the same license. A commercial license is available for closed-source use: anselme8@icloud.com.
 
 Claude Eyes is an independent project, not affiliated with, endorsed or sponsored by Anthropic, Digital Dream Labs or Living AI. Claude and Claude Code are trademarks of Anthropic; Cozmo and Vector of Digital Dream Labs; Emo of Living AI.
