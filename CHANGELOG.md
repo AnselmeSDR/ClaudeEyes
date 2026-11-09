@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.2 - 2026-11-09
+
 - Updates from the app: it checks the latest GitHub release once a day, downloads its zip, checks it and replaces itself. Each release ships the app as a zip, and the app installs and updates its Claude Code hook (no clone needed).
 
 ## 1.1 - 2026-11-09
