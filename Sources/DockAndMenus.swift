@@ -98,6 +98,14 @@ final class MenuActions: NSObject {
         SettingsWindow.shared.show()
     }
 
+    @objc func offerUpdate(_ sender: Any?) {
+        Updater.shared.offer()
+    }
+
+    @objc func installHook(_ sender: Any?) {
+        HookSetup.shared.install(quietly: false)
+    }
+
     @objc func quit(_ sender: Any?) {
         NSApp.terminate(nil)
     }
@@ -109,6 +117,26 @@ enum MenuFactory {
         let actions = MenuActions.shared
         let now = Date().timeIntervalSince1970
         let sessions = SessionStore.shared.sessions
+
+        // What needs the user first: a new version, a hook to install
+        let updater = Updater.shared
+        if let update = updater.available {
+            let busy = updater.phase != .idle
+            let item = NSMenuItem(title: busy ? "Mise à jour en cours…" : "Mettre à jour vers la version \(update.version)…",
+                                  action: busy ? nil : #selector(MenuActions.offerUpdate(_:)), keyEquivalent: "")
+            item.target = actions
+            item.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: nil)
+            menu.addItem(item)
+        }
+        let hook = HookSetup.shared
+        hook.reload()
+        if hook.status == .missing {
+            let item = NSMenuItem(title: "Installer le hook Claude Code…", action: #selector(MenuActions.installHook(_:)), keyEquivalent: "")
+            item.target = actions
+            item.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
+            menu.addItem(item)
+        }
+        if !menu.items.isEmpty { menu.addItem(.separator()) }
 
         if sessions.isEmpty {
             let empty = NSMenuItem(title: "Aucune session Claude ouverte", action: nil, keyEquivalent: "")

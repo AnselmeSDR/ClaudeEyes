@@ -260,6 +260,12 @@ final class RobotCrew {
         runner.greet(toward: chaser.foot.x, emote: .exclaim, now: now, delay: 0.3)
     }
 
+    /// The app was just updated: confetti for everyone
+    func celebrateUpdate() {
+        let now = CACurrentMediaTime()
+        for agent in agents.values { agent.celebrateUpdate(now: now) }
+    }
+
     /// Its session just finished a turn: the robots around cheer along
     func celebrated(_ agent: RobotAgent, now: CFTimeInterval) {
         for other in agents.values where other !== agent && other.isFree && other.support == agent.support && abs(other.foot.x - agent.foot.x) < 400 {
@@ -584,6 +590,12 @@ final class RobotAgent {
         facing = x >= foot.x ? 1 : -1
         walk(to: x, then: .visit(leader.id), boost: 1.25)
         socialAt = now + Double.random(in: 10...20)
+    }
+
+    func celebrateUpdate(now: CFTimeInterval) {
+        guard !isLeaving, rig.beam == 0, isStanding else { return }
+        rig.burst(.confetti)
+        if isFree { greet(toward: foot.x + 30 * facing, emote: .note, now: now, cheer: true) }
     }
 
     func emote(_ emote: RobotRig.Emote, toward x: CGFloat) {

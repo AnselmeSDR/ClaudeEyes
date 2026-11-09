@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
         applyActivationPolicy()
+        let updatedFrom = argument(after: "--updated-from").flatMap(AppVersion.init)
+        HookSetup.shared.refresh(afterUpdate: updatedFrom != nil)
         applyProgressBar()
         SessionStore.shared.start()
         Sounds.shared.start()
@@ -29,6 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         dockHelpers = DockHelperManager()
         status = StatusMenuController()
+        Updater.shared.start()
+        if let updatedFrom {
+            Updater.shared.relaunched(from: updatedFrom)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { HookSetup.shared.offerIfMissing() }
+        }
 
         // objectWillChange fires before the new value is stored
         prefsObserver = Prefs.shared.objectWillChange.sink { [weak self] _ in

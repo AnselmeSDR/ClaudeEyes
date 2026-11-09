@@ -64,12 +64,22 @@ Claude Code runs the hook on every event (prompt sent, tool started or finished,
 ## Requirements
 
 - macOS 14 or later, Apple Silicon
-- Xcode or the Command Line Tools (`swiftc`, `iconutil`, `codesign`)
-- [`jq`](https://jqlang.org) (`brew install jq`)
+- [`jq`](https://jqlang.org) (`brew install jq`), used by the hook
 - Claude Code 2.1 or later
 - Any terminal; see [Terminal support](#terminal-support) for what each one adds
+- To build from source: Xcode or the Command Line Tools (`swiftc`, `iconutil`, `codesign`)
 
 ## Install
+
+### From a release
+
+1. Download `ClaudeEyes-<version>.zip` from the [latest release](https://github.com/AnselmeSDR/ClaudeEyes/releases/latest), unzip it and move **Claude Eyes** to your Applications folder.
+2. Open it. The app is not notarized, so macOS blocks its first launch: click **Open Anyway** in **System Settings → Privacy & Security** (or run `xattr -dr com.apple.quarantine "/Applications/Claude Eyes.app"` once).
+3. The app offers to install its Claude Code hook: it copies it to `~/.claude/hooks/claude-state.sh` and registers it in `~/.claude/settings.json`. **Settings → Claude Code** does it too.
+
+Updates: once a day the app looks for a newer release on GitHub and offers it (menu bar, Dock menu or **Settings → Mises à jour**, where the daily check can be turned off; it is the app's only network access). It downloads the zip, checks its SHA-256 and signature, replaces itself and relaunches; the hook is updated with it.
+
+### From source
 
 ```bash
 git clone https://github.com/AnselmeSDR/ClaudeEyes.git
@@ -78,7 +88,11 @@ cd ClaudeEyes
 hooks/install.sh         # links the hook and registers it in ~/.claude/settings.json
 ```
 
-`hooks/install.sh` backs up your settings to `~/.claude/settings.json.bak-claude-eyes`, links `~/.claude/hooks/claude-state.sh` to the repository copy and turns off Claude Code's own terminal progress bar (`terminalProgressBarEnabled: false`), which the hook replaces in Ghostty and iTerm2. Turning the hook's bar off in the settings gives Claude Code its own bar back.
+Update with `git pull` and `./build.sh --install`: the app leaves a linked hook alone.
+
+### The hook
+
+Both ways back up your settings to `~/.claude/settings.json.bak-claude-eyes`, register the hook on every event it handles and turn off Claude Code's own terminal progress bar (`terminalProgressBarEnabled: false`), which the hook replaces in Ghostty and iTerm2. Turning the hook's bar off in the settings gives Claude Code its own bar back. Sessions started before the hook was installed only show up once restarted.
 
 Running sessions show up right away; they wake up at their next event. The first click on a face asks for permission to control your terminal app.
 
@@ -104,8 +118,10 @@ Open them from the menu bar icon (**Réglages…**):
 - **Dock**: animated icon on or off, one icon for the most important session or one icon per session.
 - **Behavior**: how long the happy face stays after a turn, after how long a session falls asleep.
 - **Sounds**: when a session waits for you, when it is done, when it stops on an error, volume.
+- **Claude Code**: whether the hook is installed and up to date, install or reinstall it.
 - **Terminal**: the terminals detected for your sessions, tab progress bar on or off.
 - **System**: launch at login.
+- **Updates**: installed version, daily check on or off, check now.
 - **Expressions**: a live gallery of every expression and what triggers it.
 
 ## Files
@@ -123,6 +139,7 @@ Open them from the menu bar icon (**Réglages…**):
 ```bash
 ./build.sh                                   # build into build/
 ./build.sh --install                         # build, install and relaunch
+./build.sh --zip                             # also pack build/ClaudeEyes-<version>.zip and its .sha256 (release assets)
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-gallery build/gallery.png      # every expression
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-color-tiles build/colors.png   # every /color
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-sounds build/sounds           # every sound, as WAV
@@ -136,7 +153,7 @@ Plain Swift compiled with `swiftc` (AppKit, SwiftUI, Core Animation), no Xcode p
 
 ```bash
 pkill -x ClaudeEyes
-rm -rf ~/Applications/"Claude Eyes.app" ~/Library/Application\ Support/Claude\ Eyes ~/.claude/eyes
+rm -rf ~/Applications/"Claude Eyes.app" /Applications/"Claude Eyes.app" ~/Library/Application\ Support/Claude\ Eyes ~/.claude/eyes
 rm ~/.claude/hooks/claude-state.sh
 defaults delete com.anselme.claude-eyes
 ```

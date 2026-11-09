@@ -1,5 +1,6 @@
 #!/bin/bash
-# Build "Claude Eyes.app". With --install, copy it to ~/Applications and (re)launch it.
+# Build "Claude Eyes.app". With --install, copy it to ~/Applications and (re)launch it. With --zip, also pack it
+# as build/ClaudeEyes-<version>.zip plus its .sha256, the release assets the in-app updater downloads.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -22,8 +23,22 @@ mkdir -p "$iconset"
 "$app/Contents/MacOS/ClaudeEyes" --render-iconset "$iconset"
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 
+# The hook ships with the app, which installs it (install.sh --copy) for those who don't build from source
+mkdir -p "$app/Contents/Resources/hooks"
+cp hooks/claude-state.sh hooks/install.sh "$app/Contents/Resources/hooks/"
+chmod +x "$app/Contents/Resources/hooks/"*.sh
+
 codesign --force --sign - "$app"
 echo "Built $app"
+
+if [ "${1:-}" = "--zip" ]; then
+  version=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
+  zip="ClaudeEyes-$version.zip"
+  rm -f "$buildDir/$zip" "$buildDir/$zip.sha256"
+  ditto -c -k --keepParent "$app" "$buildDir/$zip"
+  (cd "$buildDir" && shasum -a 256 "$zip" > "$zip.sha256")
+  echo "Packed $buildDir/$zip"
+fi
 
 if [ "${1:-}" = "--install" ]; then
   pkill -x ClaudeEyes || true

@@ -26,6 +26,7 @@ final class Prefs: ObservableObject {
     @Published var soundWhenFailed: Bool { didSet { defaults.set(soundWhenFailed, forKey: "soundWhenFailed") } }
     @Published var soundVolume: Double { didSet { defaults.set(soundVolume, forKey: "soundVolume") } }
     @Published var muteAll: Bool { didSet { defaults.set(muteAll, forKey: "muteAll") } }
+    @Published var checkUpdates: Bool { didSet { defaults.set(checkUpdates, forKey: "checkUpdates") } }
 
     // Muted sessions are read and written straight from the defaults: Dock helpers change them too
     func isSoundOn(for sessionId: String) -> Bool {
@@ -74,6 +75,7 @@ final class Prefs: ObservableObject {
             "soundWhenFailed": true,
             "soundVolume": 0.5,
             "muteAll": false,
+            "checkUpdates": true,
         ])
         showRobots = defaults.bool(forKey: "showRobots")
         robotsClimb = defaults.bool(forKey: "robotsClimb")
@@ -88,6 +90,7 @@ final class Prefs: ObservableObject {
         soundWhenFailed = defaults.bool(forKey: "soundWhenFailed")
         soundVolume = defaults.double(forKey: "soundVolume")
         muteAll = defaults.bool(forKey: "muteAll")
+        checkUpdates = defaults.bool(forKey: "checkUpdates")
     }
 }
 
@@ -114,6 +117,8 @@ final class SettingsWindow {
 struct SettingsView: View {
     @ObservedObject private var prefs = Prefs.shared
     @ObservedObject private var store = SessionStore.shared
+    @ObservedObject private var updater = Updater.shared
+    @ObservedObject private var hook = HookSetup.shared
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchError: String?
 
@@ -171,6 +176,29 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Claude Code") {
+                LabeledContent("Hook", value: hookStatus)
+                if hook.status != .linked {
+                    HStack {
+                        Button(hook.status == .missing ? "Installer le hook" : "Réinstaller le hook") {
+                            hook.install(quietly: false)
+                        }
+                        .disabled(hook.busy)
+                        if hook.busy { ProgressView().controlSize(.small) }
+                    }
+                }
+                if let error = hook.error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                Text(hook.status == .linked
+                     ? "Lié à un clone du dépôt par hooks/install.sh : git pull le met à jour."
+                     : "Claude Code lance ce hook à chaque événement d'une session ; il est copié dans ~/.claude/hooks et l'app le met à jour avec elle. Il faut jq (brew install jq).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Terminal") {
                 LabeledContent("Terminaux détectés", value: detectedTerminals)
                 Toggle("Barre de progression dans l'onglet", isOn: $prefs.progressBar)
@@ -185,6 +213,25 @@ struct SettingsView: View {
                     Text(launchError)
                         .font(.caption)
                         .foregroundStyle(.red)
+                }
+            }
+
+            Section("Mises à jour") {
+                LabeledContent("Version installée", value: AppVersion.current.description)
+                Toggle("Vérifier chaque jour", isOn: $prefs.checkUpdates)
+                HStack {
+                    Button("Rechercher maintenant") { updater.check(manual: true) }
+                        .disabled(updater.phase != .idle)
+                    if let update = updater.available, updater.phase == .idle {
+                        Button("Mettre à jour vers la version \(update.version.description)…") { updater.offer() }
+                            .keyboardShortcut(.defaultAction)
+                    }
+                    if updater.phase != .idle { ProgressView().controlSize(.small) }
+                }
+                if let status = updater.status {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(updater.failed ? .red : .secondary)
                 }
             }
 
@@ -210,6 +257,16 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(minWidth: 520, idealWidth: 620, minHeight: 500, idealHeight: 760)
+        .onAppear { hook.reload() }
+    }
+
+    private var hookStatus: String {
+        switch hook.status {
+        case .missing: return "non installé"
+        case .linked: return "lié à un clone du dépôt"
+        case .installed(current: true): return "installé, à jour"
+        case .installed(current: false): return "installé, une version plus récente est dans l'app"
+        }
     }
 
     private func soundToggle(_ title: String, isOn: Binding<Bool>, chirp: Chirp) -> some View {
