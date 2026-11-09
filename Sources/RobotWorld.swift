@@ -30,10 +30,25 @@ final class RobotWorld {
         let maxX: CGFloat
     }
 
-    /// A window side a robot can climb. side is +1 when the wall is on the robot's right (the window's left edge).
+    /// A window side a robot can climb. side is +1 when the wall is on the robot's right (the window's left edge),
+    /// 0 for the window's face, climbed straight up at offset from its left edge.
     struct Wall {
         let window: CGWindowID
         let side: CGFloat
+        var offset: CGFloat = 0
+
+        /// Where the robot goes up, for the window's current frame
+        func x(in frame: CGRect) -> CGFloat {
+            side > 0 ? frame.minX : side < 0 ? frame.maxX : frame.minX + offset
+        }
+    }
+
+    /// A window top a robot can reach by climbing straight up the window's face.
+    /// touches: the window comes down to the robot's surface, so it can climb it by hand too.
+    struct Face {
+        let window: Window
+        let x: CGFloat
+        let touches: Bool
     }
 
     private(set) var screens: [Screen] = []
@@ -167,6 +182,23 @@ final class RobotWorld {
             }
             if reachable.contains(f.maxX + hw), tops.contains(where: { $0.maxX >= f.maxX - 1 && $0.minX <= f.maxX - hw * 2 - 10 }) {
                 result.append(Wall(window: window.id, side: -1))
+            }
+        }
+        return result
+    }
+
+    /// Window faces a robot on surface can climb straight up to a top with room, right above the surface.
+    /// A window floating higher is only for robots that fly or throw a hook.
+    func faces(from surface: Surface, halfWidth hw: CGFloat, height: CGFloat) -> [Face] {
+        var result: [Face] = []
+        for window in windows {
+            if surface.support == .window(window.id) { continue }
+            let f = window.frame
+            guard f.maxY >= surface.y + height else { continue }
+            for top in tops(of: window, clearance: height + 8, minWidth: hw * 2 + 10) {
+                let lo = max(top.minX, surface.minX) + hw, hi = min(top.maxX, surface.maxX) - hw
+                guard hi - lo > 10 else { continue }
+                result.append(Face(window: window, x: CGFloat.random(in: lo...hi), touches: f.minY <= surface.y + height * 0.4))
             }
         }
         return result

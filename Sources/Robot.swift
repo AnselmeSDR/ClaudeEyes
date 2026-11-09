@@ -187,6 +187,8 @@ struct RobotGenome {
 
 enum RobotMotion {
     case idle, walk, cheer, sleep, fall
+    /// Climbing: flying up, hanging from a rope, aiming the hook, hand over hand, bouncing off a wall
+    case fly, hang, aim, climb, bounce
 }
 
 /// Core Animation layers built once from a genome. Motions are repeating CA animations
@@ -220,6 +222,10 @@ final class RobotRig {
     private var thruster: CALayer?
     private var motionKeys: [(CALayer, String)] = []
     private(set) var motion: RobotMotion = .idle
+    private let emoteBubble = CALayer()
+    private let emoteText = CATextLayer()
+    /// Top of the head, in foot coordinates
+    private var headTop: CGFloat = 0
 
     /// 1 faces right, -1 faces left. The flip is animated: the robot turns around
     var facing: CGFloat = 1 {
@@ -246,6 +252,8 @@ final class RobotRig {
         layer.anchorPoint = .zero
         build()
         extent = Self.drawnBounds(of: bot, in: bot)
+        headTop = head.convert(CGPoint(x: 0, y: genome.headSize.height), to: bot).y
+        buildEmote()
     }
 
     private func updateMount() {
@@ -814,10 +822,42 @@ final class RobotRig {
             arm.layer.transform = CATransform3DMakeRotation(armAngle(arm.rest, next), 0, 0, 1)
         }
 
+        if next == .aim, let arm = arms.last {
+            arm.layer.transform = CATransform3DMakeRotation(arm.rest + 2.2, 0, 0, 1)
+        }
+
         switch next {
-        case .idle: break
+        case .idle, .aim: break
         case .walk: walk()
         case .cheer: cheer()
+        case .fly: fly()
+        case .hang:
+            for (i, arm) in arms.enumerated() {
+                let up = Double(armAngle(arm.rest, .hang))
+                loop(arm.layer, "transform.rotation.z", values: [up - 0.08, up + 0.08, up - 0.08], duration: 0.9, phase: Double(i) * 0.5)
+            }
+            dangleLegs(amount: 0.3, duration: 1)
+            swayAntennas(amount: 0.15, duration: 0.8)
+        case .climb:
+            // One arm reaches up while the other pulls, legs push
+            let period = 2 * Ascent.step
+            for (i, arm) in arms.enumerated() {
+                let up = Double(arm.rest + (arm.rest > 0 ? 2.6 : -2.6)), mid = Double(arm.rest + (arm.rest > 0 ? 1.4 : -1.4))
+                loop(arm.layer, "transform.rotation.z", values: [up, mid, up], duration: period, phase: Double(i) * 0.5)
+            }
+            dangleLegs(amount: 0.4, duration: period)
+            loop(hopper, "transform.translation.y", values: [0, 2, 0], duration: Ascent.step)
+            swayAntennas(amount: 0.15, duration: 0.5)
+        case .bounce:
+            // Squashed when it touches the wall, stretched in the air: one cycle per hop
+            if let coil {
+                loop(coil, "transform.scale.y", values: [0.6, 1.2, 1.1, 0.6], keyTimes: [0, 0.2, 0.8, 1], duration: Ascent.hop, timing: .linear)
+            }
+            for arm in arms {
+                let rest = Double(arm.rest), out = rest + (rest > 0 ? 1.2 : -1.2)
+                loop(arm.layer, "transform.rotation.z", values: [rest, out, rest], duration: Ascent.hop)
+            }
+            swayAntennas(amount: 0.25, duration: Ascent.hop)
         case .sleep:
             loop(torso, "transform.scale.y", values: [1, 1.035, 1], duration: 4.4, fps: 10)
         case .fall:
@@ -839,6 +879,8 @@ final class RobotRig {
         switch motion {
         case .sleep: return rest * 0.4
         case .fall: return rest + (rest > 0 ? 2.3 : -2.3)
+        case .hang: return rest + (rest > 0 ? 2.75 : -2.75)
+        case .fly: return rest * 2.2
         default: return rest
         }
     }
@@ -855,6 +897,95 @@ final class RobotRig {
         if let arm = arms.last {
             let up = Double(arm.rest) + 2.3
             once(arm.layer, "transform.rotation.z", values: [Double(arm.rest), up, up - 0.3, up, Double(arm.rest)], duration: 1)
+        }
+    }
+
+    /// Waves at another robot, or hops when it has no arm
+    func wave() {
+        guard let arm = arms.last else {
+            once(hopper, "transform.translation.y", values: [0, 6, 0], duration: 0.45, timings: [.easeOut, .easeIn])
+            return
+        }
+        let rest = Double(arm.rest), up = rest + 2.3
+        once(arm.layer, "transform.rotation.z", values: [rest, up, up - 0.45, up, up - 0.45, up, rest], duration: 1.4)
+    }
+
+    enum Emote {
+        case exclaim, question, heart, note, sleep
+
+        var text: String {
+            switch self {
+            case .exclaim: return "!"
+            case .question: return "?"
+            case .heart: return "♥"
+            case .note: return "♪"
+            case .sleep: return "z"
+            }
+        }
+
+        var color: CGColor {
+            switch self {
+            case .exclaim: return CGColor(srgbRed: 1, green: 0.55, blue: 0.1, alpha: 1)
+            case .question: return CGColor(srgbRed: 0.2, green: 0.55, blue: 1, alpha: 1)
+            case .heart: return CGColor(srgbRed: 1, green: 0.25, blue: 0.45, alpha: 1)
+            case .note: return CGColor(srgbRed: 0.15, green: 0.72, blue: 0.4, alpha: 1)
+            case .sleep: return CGColor(srgbRed: 0.5, green: 0.45, blue: 0.9, alpha: 1)
+            }
+        }
+    }
+
+    private func buildEmote() {
+        emoteBubble.bounds = CGRect(x: 0, y: 0, width: 20, height: 18)
+        emoteBubble.backgroundColor = CGColor(gray: 1, alpha: 0.94)
+        emoteBubble.cornerRadius = 9
+        emoteBubble.borderColor = CGColor(gray: 0, alpha: 0.25)
+        emoteBubble.borderWidth = 0.8
+        emoteBubble.opacity = 0
+        emoteText.frame = CGRect(x: 0, y: 0, width: 20, height: 17)
+        emoteText.alignmentMode = .center
+        emoteText.font = NSFont.systemFont(ofSize: 13, weight: .heavy)
+        emoteText.fontSize = 13
+        emoteBubble.addSublayer(emoteText)
+        layer.addSublayer(emoteBubble)
+    }
+
+    /// A little bubble next to its head, on the given side, for a couple of seconds
+    func emote(_ emote: Emote, side: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        emoteText.string = emote.text
+        emoteText.foregroundColor = emote.color
+        emoteBubble.position = CGPoint(x: Self.foot.x + side * (genome.headSize.width / 2 + 9), y: Self.foot.y + headTop - 2)
+        CATransaction.commit()
+        let fade = keyframes("opacity", values: [0, 1, 1, 0], keyTimes: [0, 0.08, 0.85, 1], duration: 1.9, timing: .linear, timings: nil, fps: 24)
+        emoteBubble.add(fade, forKey: "emote.opacity")
+        let pop = keyframes("transform.scale", values: [0.2, 1.15, 1, 1], keyTimes: [0, 0.1, 0.18, 1], duration: 1.9, timing: .easeOut, timings: nil, fps: 24)
+        emoteBubble.add(pop, forKey: "emote.scale")
+    }
+
+    private func fly() {
+        loop(hopper, "transform.translation.y", values: [0, 2.5, 0], duration: 0.7)
+        if let thruster {
+            loop(thruster, "opacity", values: [0.75, 1, 0.75], duration: 0.12)
+            loop(thruster, "transform.scale.x", values: [1.1, 1.4, 1.1], duration: 0.12)
+        }
+        for (i, arm) in arms.enumerated() {
+            let out = Double(armAngle(arm.rest, .fly))
+            let flap = genome.arms == .fins ? 0.35 : 0.12
+            loop(arm.layer, "transform.rotation.z", values: [out - flap, out + flap, out - flap], duration: genome.arms == .fins ? 0.3 : 0.6,
+                 phase: Double(i) * 0.5)
+        }
+        dangleLegs(amount: 0.2, duration: 0.8)
+        swayAntennas(amount: 0.2, duration: 0.5)
+        if let blade {
+            loop(blade, "transform.scale.x", values: [1, 0.12, -1, 0.12, 1], duration: 0.12, timing: .linear, fps: 30)
+        }
+    }
+
+    private func dangleLegs(amount: Double, duration: Double) {
+        for leg in legs {
+            let rest = Double(leg.rest)
+            loop(leg.layer, "transform.rotation.z", values: [rest - amount, rest + amount, rest - amount], duration: duration, phase: leg.phase)
         }
     }
 

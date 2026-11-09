@@ -17,7 +17,7 @@ Quand plusieurs sessions Claude Code tournent en même temps, difficile de savoi
 
 ## Fonctionnalités
 
-- **Robots** : un robot par session, tiré d'une graine : chenilles, roues, pattes, ressort ou lévitation, forme de tête, antennes, oreilles, bras, couleurs… aucun n'est pareil. Ils se baladent en bas de chaque écran, grimpent le long des fenêtres qui ont de la place au-dessus et marchent dessus, passent d'un écran à l'autre et s'endorment avec leur session. Quand une session t'attend, son robot vient sur l'écran où se trouve ta souris et sautille. Un clic sur un robot ouvre le terminal de sa session, un glisser le déplace (il retombe là où tu le lâches), un clic droit ouvre son menu (son, nouveau robot). Survole-le pour voir sa session et ce que fait Claude ; cette bulle s'affiche aussi quelques secondes quand la session change d'état.
+- **Robots** : un robot par session, tiré d'une graine : chenilles, roues, pattes, ressort ou lévitation, forme de tête, antennes, oreilles, bras, couleurs… aucun n'est pareil. Ils se baladent en bas de chaque écran, montent sur les fenêtres qui ont de la place au-dessus (en roulant le long du bord, en volant, en rebondissant, à la force des bras ou au grappin, selon leurs pièces) et marchent dessus, passent d'un écran à l'autre et s'endorment avec leur session. Ils se rencontrent aussi : ils se saluent, se rendent visite, jouent à chat, font la fête quand une session se termine, et trouvent endormi un robot qui dort. Quand une session t'attend, son robot vient sur l'écran où se trouve ta souris et sautille. Un clic sur un robot ouvre le terminal de sa session, un glisser le déplace (il retombe là où tu le lâches), un clic droit ouvre son menu (son, nouveau robot). Survole-le pour voir sa session et ce que fait Claude ; cette bulle s'affiche aussi quelques secondes quand la session change d'état.
 - **Dock** : soit une icône animée qui montre la session la plus importante (la pastille compte les sessions qui t'attendent), soit **une icône par session**, au nom de la session.
 - **Barre des menus** : une icône fixe qui liste les sessions, affiche ou rappelle les robots, ouvre le labo des robots (des robots au hasard qui enchaînent tous leurs mouvements) et les réglages.
 - **Tes noms et tes couleurs** : le titre donné avec `/rename` et la couleur choisie avec `/color` dans Claude Code sont repris automatiquement. Les états calmes prennent la couleur de la session, les alertes gardent la leur (orange pour l'attente, rouge pour une erreur, vert quand c'est fini) et clignotent pour ne jamais passer inaperçues.
@@ -127,7 +127,7 @@ Ils s'ouvrent depuis l'icône de la barre des menus (**Réglages…**) :
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-color-tiles build/colors.png   # toutes les couleurs /color
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-sounds build/sounds           # tous les sons, en WAV
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-robots build/robots.png         # 30 robots au hasard
-"build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --robot-lab                             # robots animés, seuls
+"build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --robot-lab [grimpe]                    # robots animés, seuls (première étape au choix)
 ```
 
 Du Swift compilé avec `swiftc` (AppKit, SwiftUI, Core Animation), sans projet Xcode. L'architecture est décrite dans [CLAUDE.md](CLAUDE.md).

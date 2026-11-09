@@ -17,7 +17,7 @@ When you run several Claude Code sessions at once, it is hard to tell which one 
 
 ## Features
 
-- **Robots**: one robot per session, generated from a seed: tracks, wheels, legs, springs or hovering, head shape, antennas, ears, arms, colors... no two alike. They stroll at the bottom of every screen, climb the sides of windows that have room on top and walk on them, move from one screen to another, and fall asleep when their session does. When a session waits for you, its robot comes to the screen your pointer is on and jumps around. Click a robot to jump to its terminal, drag it to put it elsewhere (it falls where you drop it), right-click it for its menu (sound, a new robot). Hover it to see its session and what Claude is doing; this bubble also shows for a few seconds when the session changes state.
+- **Robots**: one robot per session, generated from a seed: tracks, wheels, legs, springs or hovering, head shape, antennas, ears, arms, colors... no two alike. They stroll at the bottom of every screen, get on top of the windows that have room above them (driving up the side, flying, bouncing off it, hand over hand or with a grappling hook, depending on their parts) and walk on them, move from one screen to another, and fall asleep when their session does. They meet too: they say hello, visit each other, play tag, cheer along when a session finishes, and find a sleeping robot asleep. When a session waits for you, its robot comes to the screen your pointer is on and jumps around. Click a robot to jump to its terminal, drag it to put it elsewhere (it falls where you drop it), right-click it for its menu (sound, a new robot). Hover it to see its session and what Claude is doing; this bubble also shows for a few seconds when the session changes state.
 - **Dock**: either one animated icon showing the session that matters most (badge = sessions waiting for you), or **one Dock icon per session**, named after the session.
 - **Menu bar**: a static icon listing every session, showing or calling back the robots, the robot lab (random robots going through every motion) and the settings.
 - **Your names and colors**: the title set with `/rename` and the color set with `/color` in Claude Code are picked up automatically. Calm moods use the session color, alerts keep theirs (orange waiting, red error, green done) and pulse so you never miss them.
@@ -127,7 +127,7 @@ Open them from the menu bar icon (**Réglages…**):
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-color-tiles build/colors.png   # every /color
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-sounds build/sounds           # every sound, as WAV
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-robots build/robots.png         # 30 random robots
-"build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --robot-lab                             # animated robots, alone
+"build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --robot-lab [grimpe]                    # animated robots, alone (optional first step)
 ```
 
 Plain Swift compiled with `swiftc` (AppKit, SwiftUI, Core Animation), no Xcode project. See [CLAUDE.md](CLAUDE.md) for the architecture.
