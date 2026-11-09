@@ -47,12 +47,13 @@ Claude Code hook events ─▶ ~/.claude/hooks/claude-state.sh ─▶ ~/.claude/
 ```bash
 ./build.sh            # build/Claude Eyes.app
 ./build.sh --install  # copy to ~/Applications and relaunch
-./build.sh --zip      # also build/ClaudeEyes-<version>.zip + .sha256, to attach to the GitHub release:
-                      # gh release upload vX.Y build/ClaudeEyes-X.Y.zip build/ClaudeEyes-X.Y.zip.sha256
+./build.sh --zip      # also build/ClaudeEyes-<version>.zip + .sha256, the release assets
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-gallery build/gallery.png  # check expressions visually
 ```
 
 Compiled with `swiftc -swift-version 5` (Swift 6 strict concurrency not enabled), target macOS 14, arm64, ad-hoc signed.
+
+Releases: the `Release X.Y` commit and its annotated tag `vX.Y` are pushed as usual; on GitHub the tag runs `.github/workflows/release.yml` (macOS runner): it fails if the tag doesn't match `Info.plist`, runs `./build.sh --zip` and creates a **draft** release with the zip, its `.sha256` and notes made from the version's CHANGELOG section plus install steps. Edit the notes (one-line intro, bold lead per bullet: the update alert shows those leads), then publish: the in-app updater only sees published releases. A tag with a suffix (`v1.3-test1`) makes a draft prerelease to try the pipeline; a manual run (`gh workflow run release.yml -R AnselmeSDR/ClaudeEyes`) only builds the zip as a workflow artifact.
 
 ## Repositories
 

@@ -139,7 +139,7 @@ Ils s'ouvrent depuis l'icône de la barre des menus (**Réglages…**) :
 ```bash
 ./build.sh                                   # compile dans build/
 ./build.sh --install                         # compile, installe et relance
-./build.sh --zip                             # produit aussi build/ClaudeEyes-<version>.zip et son .sha256 (fichiers de release)
+./build.sh --zip                             # produit aussi build/ClaudeEyes-<version>.zip et son .sha256 (fichiers de release, compilés par GitHub Actions sur un tag de version)
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-gallery build/gallery.png      # toutes les expressions
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-color-tiles build/colors.png   # toutes les couleurs /color
 "build/Claude Eyes.app/Contents/MacOS/ClaudeEyes" --render-sounds build/sounds           # tous les sons, en WAV
