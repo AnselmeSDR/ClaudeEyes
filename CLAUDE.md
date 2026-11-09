@@ -56,4 +56,4 @@ Compiled with `swiftc -swift-version 5` (Swift 6 strict concurrency not enabled)
 - GitLab (main): https://gitlab.com/AnselmeSDR/ClaudeEyes
 - GitHub (mirror): https://github.com/AnselmeSDR/ClaudeEyes
 
-GitHub is public (MIT, `LICENSE`), GitLab stays private. `origin` has two push URLs: a single `git push` sends to both. Git identity is set locally: `Anselme SDR <anselme8@icloud.com>`.
+GitHub is public (AGPL-3.0 with a commercial license on request, `LICENSE`; 1.0 stayed MIT), GitLab stays private. `origin` has two push URLs: a single `git push` sends to both. Git identity is set locally: `Anselme SDR <anselme8@icloud.com>`.
