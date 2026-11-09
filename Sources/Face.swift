@@ -205,6 +205,8 @@ struct FaceFrame {
     var gaze: CGPoint = .zero
     var blink: CGFloat = 0   // 0 open ... 1 closed
     var lift: CGFloat = 0    // vertical offset in face units (bounce, breathing)
+    var dizzy: CGFloat = 0   // 1 draws spirals instead of eyes
+    var spin: CGFloat = 0    // spirals' angle
 
     static func still(_ mood: Mood) -> FaceFrame {
         FaceFrame(params: mood.params, gaze: mood.stillGaze)
@@ -225,6 +227,10 @@ final class FaceAnimator {
     private var blinkStart: CFTimeInterval = -10
     private var nextBlinkAt: CFTimeInterval
     private var doubleBlink = false
+    /// Spiral eyes until then: a robot that was shaken
+    var dizzyUntil: CFTimeInterval = 0
+    /// Where to look, in face units, instead of where the mood looks: the pointer nearby
+    var lookAt: CGPoint?
 
     init(mood: Mood, now: CFTimeInterval = CACurrentMediaTime()) {
         self.mood = mood
@@ -258,7 +264,12 @@ final class FaceAnimator {
         }
         params = params.mixed(goal, 1 - exp(-dt * 10))
 
-        if now >= nextGazeAt { pickGaze(now) }
+        if let lookAt {
+            gazeTarget = lookAt
+            nextGazeAt = now + 0.8
+        } else if now >= nextGazeAt {
+            pickGaze(now)
+        }
         let gazeEase = 1 - exp(-dt * 16)
         gaze.x = lerp(gaze.x, gazeTarget.x, gazeEase)
         gaze.y = lerp(gaze.y, gazeTarget.y, gazeEase)
@@ -271,7 +282,9 @@ final class FaceAnimator {
             shown.g = lerp(shown.g, 1, pulse)
             shown.b = lerp(shown.b, 1, pulse)
         }
-        return FaceFrame(params: shown, gaze: gaze, blink: blink(at: now), lift: lift(at: now))
+        let dizzy = now < dizzyUntil
+        return FaceFrame(params: shown, gaze: dizzy ? .zero : gaze, blink: dizzy ? 0 : blink(at: now), lift: lift(at: now),
+                         dizzy: dizzy ? 1 : 0, spin: dizzy ? CGFloat(now * 7).truncatingRemainder(dividingBy: 2 * .pi) : 0)
     }
 
     private func blink(at now: CFTimeInterval) -> CGFloat {
@@ -368,6 +381,10 @@ enum FaceRenderer {
             let eh = max(u * 0.05, baseH * e.h * perspective * (1 - 0.92 * f.blink))
             let ex = cx + side * (gap / 2 + baseW / 2)
             let ey = cy + e.dy * u
+            if f.dizzy > 0.5 {
+                path.addPath(spiral(center: CGPoint(x: ex, y: ey), radius: baseW * 0.58, angle: f.spin * side, turn: side, width: u * 0.075))
+                continue
+            }
             let rect = CGRect(x: ex - ew / 2, y: ey - eh / 2, width: ew, height: eh)
             let radius = min(ew, eh) * 0.3
             var eye: CGPath = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
@@ -377,6 +394,20 @@ enum FaceRenderer {
             path.addPath(eye)
         }
         return path
+    }
+
+    /// A spiral eye, as a filled outline so the face stays a single filled path
+    private static func spiral(center c: CGPoint, radius: CGFloat, angle: CGFloat, turn: CGFloat, width: CGFloat) -> CGPath {
+        let line = CGMutablePath()
+        let steps = 48
+        for i in 0...steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let a = angle + turn * t * 2.3 * 2 * .pi
+            let r = radius * (0.1 + 0.9 * t)
+            let p = CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r)
+            if i == 0 { line.move(to: p) } else { line.addLine(to: p) }
+        }
+        return line.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 2)
     }
 
     /// Draws two glowing eyes centered in rect (CPU rendering: Dock icon, snapshots)
@@ -455,7 +486,7 @@ extension FaceFrame {
             (params.left.w, o.params.left.w), (params.left.h, o.params.left.h), (params.left.lidTop, o.params.left.lidTop),
             (params.left.lidBottom, o.params.left.lidBottom), (params.right.h, o.params.right.h),
             (params.right.lidTop, o.params.right.lidTop), (params.r, o.params.r), (params.g, o.params.g),
-            (params.b, o.params.b), (params.alpha, o.params.alpha),
+            (params.b, o.params.b), (params.alpha, o.params.alpha), (dizzy, o.dizzy), (dizzy * spin, o.dizzy * o.spin),
         ]
         return values.allSatisfy { abs($0.0 - $0.1) < 0.003 }
     }

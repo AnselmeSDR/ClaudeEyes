@@ -15,6 +15,7 @@ final class RobotWorld {
         let frame: CGRect
         /// 0 is the frontmost
         let order: Int
+        let owner: pid_t
     }
 
     enum Support: Equatable {
@@ -79,8 +80,8 @@ final class RobotWorld {
         }
         var result: [Window] = []
         for info in list {
-            guard (info[kCGWindowLayer as String] as? Int) == 0,
-                  (info[kCGWindowOwnerPID as String] as? pid_t) != ownPid,
+            let owner = info[kCGWindowOwnerPID as String] as? pid_t ?? 0
+            guard (info[kCGWindowLayer as String] as? Int) == 0, owner != ownPid,
                   (info[kCGWindowAlpha as String] as? Double ?? 1) > 0.2,
                   let id = info[kCGWindowNumber as String] as? CGWindowID,
                   let dictionary = info[kCGWindowBounds as String] as? NSDictionary,
@@ -88,7 +89,7 @@ final class RobotWorld {
                   bounds.width >= 120, bounds.height >= 60 else { continue }
             // CoreGraphics counts y downwards from the top of the main screen
             let frame = CGRect(x: bounds.minX, y: primaryHeight - bounds.maxY, width: bounds.width, height: bounds.height)
-            result.append(Window(id: id, frame: frame, order: result.count))
+            result.append(Window(id: id, frame: frame, order: result.count, owner: owner))
         }
         windows = result
     }

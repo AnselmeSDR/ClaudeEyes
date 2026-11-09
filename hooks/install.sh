@@ -9,7 +9,7 @@ repoHook="$(cd "$(dirname "$0")" && pwd)/claude-state.sh"
 target="$HOME/.claude/hooks/claude-state.sh"
 settings="$HOME/.claude/settings.json"
 events=(SessionStart UserPromptSubmit PreToolUse PostToolUse PostToolUseFailure PermissionRequest PermissionDenied
-        Notification SubagentStart PreCompact PostCompact Stop StopFailure SessionEnd)
+        Notification SubagentStart SubagentStop PreCompact PostCompact Stop StopFailure SessionEnd)
 
 command -v jq > /dev/null || { echo "jq is required: brew install jq" >&2; exit 1; }
 

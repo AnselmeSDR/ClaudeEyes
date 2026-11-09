@@ -15,6 +15,8 @@ final class RobotCrew {
     private var lastTick = CACurrentMediaTime()
     private var screensAsleep = false
     private var nextSocial: CFTimeInterval = 0
+    private var outfit = RobotOutfit.at(Date())
+    private var outfitCheckAt: CFTimeInterval = 0
     private var sessionsObserver: AnyCancellable?
     private var observers: [NSObjectProtocol] = []
 
@@ -79,6 +81,7 @@ final class RobotCrew {
         var delay = 0.0
         for id in ids where agents[id] == nil {
             let agent = RobotAgent(id: id, seed: seed(for: id), crew: self)
+            agent.outfit = outfit
             agents[id] = agent
             if let screen = world.nearestScreen(to: mouse) {
                 let ground = world.ground(screen)
@@ -94,7 +97,17 @@ final class RobotCrew {
             leaving.append(agent)
         }
         for session in sessions { agents[session.id]?.session = session }
+        updateTeams(sessions)
         updateTimer()
+    }
+
+    /// Sessions in the same repository carry the same pennant
+    private func updateTeams(_ sessions: [Session]) {
+        let roots = Dictionary(grouping: sessions) { ProjectRoot.of($0.record.cwd) ?? "" }
+        for (root, members) in roots {
+            let team = !root.isEmpty && members.count > 1 ? RobotTeam(key: root) : nil
+            for session in members { agents[session.id]?.team = team }
+        }
     }
 
     private func screensChanged() {
@@ -136,6 +149,15 @@ final class RobotCrew {
             nextSocial = now + 0.5
             socialize(now)
         }
+        // A hat for the season, a headlamp at night
+        if now >= outfitCheckAt {
+            outfitCheckAt = now + 60
+            let current = RobotOutfit.at(Date())
+            if current != outfit {
+                outfit = current
+                for agent in all { agent.outfit = current }
+            }
+        }
         for agent in all { agent.update(tick) }
         CATransaction.commit()
         leaving.removeAll { agent in
@@ -163,8 +185,41 @@ final class RobotCrew {
     }
 
     private func meet(_ a: RobotAgent, _ b: RobotAgent, _ now: CFTimeInterval) {
+        // Teammates slap hands, at the same time
+        if a.team != nil, a.team == b.team {
+            a.greet(toward: b.foot.x, gesture: .highFive(clap: true), now: now, delay: 0.3)
+            b.greet(toward: a.foot.x, gesture: .highFive(clap: false), now: now, delay: 0.3)
+            return
+        }
         a.greet(toward: b.foot.x, emote: [.exclaim, .heart, .note].randomElement()!, now: now)
         b.greet(toward: a.foot.x, emote: [.heart, .note, .exclaim].randomElement()!, now: now, delay: 0.7)
+    }
+
+    /// Its free teammates on its surface walk behind it, in a line
+    func lead(_ leader: RobotAgent, to x: CGFloat, on surface: RobotWorld.Surface, now: CFTimeInterval) {
+        guard let team = leader.team else { return }
+        let direction: CGFloat = x >= leader.foot.x ? 1 : -1
+        var behind = x
+        var previous = leader
+        let followers = agents.values.filter { $0 !== leader && $0.team == team && $0.isFree && $0.support == leader.support
+            && abs($0.foot.x - leader.foot.x) < 500 }
+        for mate in followers.sorted(by: { abs($0.foot.x - leader.foot.x) < abs($1.foot.x - leader.foot.x) }) {
+            behind -= direction * (previous.halfWidth + mate.halfWidth + 14)
+            let spot = min(max(behind, surface.minX + mate.halfWidth), surface.maxX - mate.halfWidth)
+            mate.follow(previous, to: spot, now: now)
+            previous = mate
+        }
+    }
+
+    /// A robot of the same team, wherever it is
+    func teammate(for agent: RobotAgent) -> RobotAgent? {
+        guard let team = agent.team else { return nil }
+        return agents.values.filter { $0 !== agent && $0.team == team }.randomElement()
+    }
+
+    func hasTeammate(of agent: RobotAgent, on support: RobotWorld.Support?) -> Bool {
+        guard let team = agent.team else { return false }
+        return agents.values.contains { $0 !== agent && $0.team == team && $0.support == support }
     }
 
     /// Another robot on the same surface, far enough to be worth a walk
@@ -248,8 +303,17 @@ final class RobotAgent {
     /// What to do at the end of a walk
     private enum Next {
         case rest, cheer, jump(CGFloat), climb(RobotWorld.Wall, ClimbStyle), cross(RobotWorld.Screen)
+        /// Knocks on its terminal's window, facing it
+        case knock(CGFloat)
         /// Another robot, by id: says hello on arrival, or tags it at the end of a chase
         case visit(String), tag(String)
+    }
+
+    /// What it does when it greets another robot
+    enum Gesture {
+        case wave(RobotRig.Emote), cheer(RobotRig.Emote)
+        /// With a teammate; clap: this one shows the slap
+        case highFive(clap: Bool)
     }
 
     private enum State {
@@ -264,10 +328,18 @@ final class RobotAgent {
         case beamIn(start: CFTimeInterval)
         case sleep
         case cheer(until: CFTimeInterval)
+        /// Sits on a window's edge, legs dangling
+        case sit(until: CFTimeInterval)
+        /// Knocks on its terminal's window until its session gets an answer
+        case knock(until: CFTimeInterval)
+        /// Reels after being shaken
+        case dizzy(until: CFTimeInterval)
     }
 
     private static let gravity: CGFloat = 1600
     private static let beamDuration = 0.35
+    /// Room on its stage above its head for bursts, and below its foot for its legs when sitting
+    private static let headroom: CGFloat = 60, legroom: CGFloat = 34
 
     let id: String
     var session: Session? {
@@ -303,8 +375,29 @@ final class RobotAgent {
     private var paceBoost: CGFloat = 1
     /// Not before then for a new encounter
     private(set) var socialAt = CACurrentMediaTime() + Double.random(in: 5...15)
-    private var gesture: (at: CFTimeInterval, emote: RobotRig.Emote, cheer: Bool)?
+    private var gesture: (at: CFTimeInterval, kind: Gesture)?
     private var pendingSeed: UInt64?
+    var team: RobotTeam? {
+        didSet { if team != oldValue { rig.setTeam(team) } }
+    }
+    var outfit = RobotOutfit() {
+        didSet { rig.setOutfit(outfit) }
+    }
+    /// Its session's subagents, running around it
+    private var minis: [MiniBot] = []
+    private let minisLayer = CALayer()
+    private var minisBounds: ClosedRange<CGFloat>?
+    private var minisOut = false
+    /// The tool in its hand, kept a moment between two tools
+    private var shownProp: RobotProp?
+    private var propOffAt: CFTimeInterval?
+    private var nextKnock: CFTimeInterval = 0
+    /// Spiral eyes until then, after a shake
+    private var dizzyUntil: CFTimeInterval = 0
+    private var shake = ShakeMeter()
+    /// Gentle pointer moves over it, up to a petting
+    private var pet = PetMeter()
+    private var petUntil: CFTimeInterval = 0
     private var visible = true
     private var isLeaving = false
     private(set) var isGone = false
@@ -359,6 +452,8 @@ final class RobotAgent {
         rope.strokeColor = rig.genome.accent.shaded(0.85).cg()
         rope.isHidden = true
         view.layer?.insertSublayer(rope, below: rig.layer)
+        minisLayer.anchorPoint = .zero
+        view.layer?.insertSublayer(minisLayer, below: rig.layer)
         view.agent = self
         panel.contentView = view
         rig.beam = 1
@@ -428,6 +523,7 @@ final class RobotAgent {
         guard !isLeaving else { return }
         endClimb()
         grab = CGVector(dx: foot.x - point.x, dy: foot.y - point.y)
+        shake.start(at: point)
         support = nil
         perchFrame = nil
         state = .carried
@@ -438,6 +534,8 @@ final class RobotAgent {
     func carry(to point: CGPoint) {
         guard case .carried = state else { return }
         foot = CGPoint(x: point.x + grab.dx, y: point.y + grab.dy)
+        let now = CACurrentMediaTime()
+        if shake.note(point, now: now) { dizzyUntil = now + 3.5 }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layout(nil)
@@ -470,11 +568,22 @@ final class RobotAgent {
 
     /// Stops and faces another robot, then waves (or cheers) with a little bubble
     func greet(toward x: CGFloat, emote: RobotRig.Emote, now: CFTimeInterval, delay: Double = 0, cheer: Bool = false) {
+        greet(toward: x, gesture: cheer ? .cheer(emote) : .wave(emote), now: now, delay: delay)
+    }
+
+    func greet(toward x: CGFloat, gesture kind: Gesture, now: CFTimeInterval, delay: Double = 0) {
         facing = x >= foot.x ? 1 : -1
         paceBoost = 1
         state = .greet(until: now + delay + 2)
-        gesture = (now + delay, emote, cheer)
+        gesture = (now + delay, kind)
         socialAt = now + Double.random(in: 25...60)
+    }
+
+    /// Walks behind a teammate going somewhere, then greets it there
+    func follow(_ leader: RobotAgent, to x: CGFloat, now: CFTimeInterval) {
+        facing = x >= foot.x ? 1 : -1
+        walk(to: x, then: .visit(leader.id), boost: 1.25)
+        socialAt = now + Double.random(in: 10...20)
     }
 
     func emote(_ emote: RobotRig.Emote, toward x: CGFloat) {
@@ -512,32 +621,61 @@ final class RobotAgent {
             let newState = session?.state
             if let sessionState, let newState, newState != sessionState { bubbleUntil = t.now + 4 }
             sessionState = newState
+            syncMinis(t)
+            pickProp(t)
         }
         react(to: mood, t)
         step(mood, t)
         layout(t.world)
-        updateFace(mood, t.now)
+        updateMinis(t)
+        updateFace(mood, t)
         updateMotion()
+        rig.setStars(t.now < dizzyUntil)
         updatePointer(mood, t)
+    }
+
+    /// The tool of its session in its hand; between two tools it keeps the last one a moment
+    private func pickProp(_ t: Tick) {
+        if let wanted = session?.prop {
+            shownProp = wanted
+            propOffAt = nil
+        } else if shownProp != nil {
+            if propOffAt == nil { propOffAt = t.now + 1.5 }
+            if let off = propOffAt, t.now >= off {
+                shownProp = nil
+                propOffAt = nil
+            }
+        }
     }
 
     private var isStanding: Bool {
         switch state {
-        case .idle, .walk, .sleep, .cheer, .greet: return true
+        case .idle, .walk, .sleep, .cheer, .greet, .sit, .knock, .dizzy: return true
         default: return false
         }
     }
 
+    private var isSitting: Bool {
+        if case .sit = state { return true }
+        return false
+    }
+
     private func react(to mood: Mood, _ t: Tick) {
         defer { lastMood = mood }
-        guard mood != lastMood, isStanding else { return }
+        guard mood != lastMood else { return }
+        // Confetti when the tests pass, sparks when something fails
+        if let lastMood, rig.beam == 0 {
+            if mood == .happy, session?.record.signal == "testsPassed" { rig.burst(.confetti) }
+            if mood.tint == .error, lastMood.tint != .error { rig.burst(.sparks) }
+        }
+        guard isStanding else { return }
         if mood == .waiting {
             goToUser(t)
         } else if mood == .sleepy {
             state = .sleep
         } else {
             switch state {
-            case .sleep, .cheer, .walk(_, .cheer): state = .idle(until: t.now + Double.random(in: 1...3))
+            case .sleep, .cheer, .walk(_, .cheer), .sit, .knock, .walk(_, .knock): state = .idle(until: t.now + Double.random(in: 1...3))
             default: break
             }
             if mood == .happy, lastMood != nil {
@@ -597,8 +735,16 @@ final class RobotAgent {
             guard keepFooting(t) else { return }
             if let gesture, t.now >= gesture.at {
                 self.gesture = nil
-                if gesture.cheer { rig.celebrate() } else { rig.wave() }
-                rig.emote(gesture.emote, side: facing)
+                switch gesture.kind {
+                case .wave(let emote):
+                    rig.wave()
+                    rig.emote(emote, side: facing)
+                case .cheer(let emote):
+                    rig.celebrate()
+                    rig.emote(emote, side: facing)
+                case .highFive(let clap):
+                    rig.highFive(side: facing, clap: clap)
+                }
             }
             if t.now >= until { state = .idle(until: t.now + Double.random(in: 1...3)) }
 
@@ -671,6 +817,35 @@ final class RobotAgent {
             } else if t.now >= until {
                 goToUser(t)
             }
+
+        case .sit(let until):
+            guard keepFooting(t) else { return }
+            if mood == .waiting {
+                goToUser(t)
+            } else if mood == .sleepy {
+                state = .sleep
+            } else if t.now >= until {
+                state = .idle(until: t.now + Double.random(in: 1...3))
+            } else if Double.random(in: 0..<1) < t.dt * 0.1 {
+                rig.fidget()
+            }
+
+        case .knock(let until):
+            guard keepFooting(t) else { return }
+            if mood != .waiting {
+                state = .idle(until: t.now + 1)
+                return
+            }
+            if t.now >= nextKnock {
+                nextKnock = t.now + RobotRig.knockPeriod
+                rig.emote(.knock, side: facing)
+            }
+            // Follows its window if it moved
+            if t.now >= until { goToUser(t) }
+
+        case .dizzy(let until):
+            guard keepFooting(t) else { return }
+            if t.now >= until { state = .idle(until: t.now + Double.random(in: 0.5...1.5)) }
         }
     }
 
@@ -678,7 +853,12 @@ final class RobotAgent {
         foot.y = floor.y
         support = floor.support
         if case .window(let id) = floor.support { perchFrame = t.world.window(id)?.frame }
-        state = .idle(until: t.now + Double.random(in: 1...3))
+        if t.now < dizzyUntil {
+            dizzyUntil = max(dizzyUntil, t.now + 2.5)
+            state = .dizzy(until: dizzyUntil)
+        } else {
+            state = .idle(until: t.now + Double.random(in: 1...3))
+        }
         rig.land()
     }
 
@@ -757,8 +937,29 @@ final class RobotAgent {
             if roll < 0.22, crew.startChase(by: self, of: other, on: surface, now: t.now) { return }
         }
 
+        // Teammates stick together: walks up to one, or beams next to one on another screen
+        if let mate = crew.teammate(for: self), Double.random(in: 0..<1) < 0.4 {
+            let gap = halfWidth + mate.halfWidth + 14
+            if mate.support == support, abs(mate.foot.x - foot.x) > gap + 120 {
+                let x = mate.foot.x + (foot.x < mate.foot.x ? -gap : gap)
+                walk(to: min(max(x, surface.minX + halfWidth), surface.maxX - halfWidth), then: .visit(mate.id))
+                return
+            }
+            if mate.support != support, case .ground(let id)? = mate.support, let screen = world.screen(id) {
+                let ground = world.ground(screen)
+                let x = crew.freeSpot(on: ground, near: mate.foot.x + (Bool.random() ? gap : -gap), for: self)
+                state = .beamOut(start: t.now, to: Destination(support: ground.support, foot: CGPoint(x: x, y: ground.y)))
+                return
+            }
+        }
+        let withTeam = crew.hasTeammate(of: self, on: support)
+
         if Prefs.shared.robotsClimb, !working, Double.random(in: 0..<1) < 0.4, let (wall, style, x) = pickClimb(from: surface, world) {
             walk(to: Ascent.base(wallX: x, side: wall.side, halfWidth: halfWidth, style: style), then: .climb(wall, style))
+            return
+        }
+        if case .window = surface.support, Double.random(in: 0..<1) < 0.35 {
+            state = .sit(until: t.now + Double.random(in: 8...20))
             return
         }
         if case .window = surface.support, Double.random(in: 0..<1) < 0.3 {
@@ -766,7 +967,7 @@ final class RobotAgent {
             walk(to: side > 0 ? surface.maxX : surface.minX, then: .jump(side))
             return
         }
-        if case .ground(let id) = surface.support, Double.random(in: 0..<1) < 0.2, let screen = world.screen(id) {
+        if case .ground(let id) = surface.support, !withTeam, Double.random(in: 0..<1) < 0.2, let screen = world.screen(id) {
             let side: CGFloat = Bool.random() ? 1 : -1
             if let neighbor = world.neighbor(of: screen, side: side) {
                 walk(to: side > 0 ? screen.frame.maxX + halfWidth : screen.frame.minX - halfWidth, then: .cross(neighbor))
@@ -775,7 +976,7 @@ final class RobotAgent {
         }
         // Screens that don't share a ground (one above the other): beams over now and then
         let here = world.screen(containing: CGPoint(x: foot.x, y: foot.y + 1))?.id
-        if Double.random(in: 0..<1) < 0.06, let other = world.screens.filter({ $0.id != here }).randomElement() {
+        if !withTeam, Double.random(in: 0..<1) < 0.06, let other = world.screens.filter({ $0.id != here }).randomElement() {
             let ground = world.ground(other)
             let x = crew.freeSpot(on: ground, near: nil, for: self)
             state = .beamOut(start: t.now, to: Destination(support: ground.support, foot: CGPoint(x: x, y: ground.y)))
@@ -784,6 +985,7 @@ final class RobotAgent {
         let x = crew.freeSpot(on: surface, near: nil, for: self)
         if abs(x - foot.x) > 30 {
             walk(to: x, then: .rest)
+            crew.lead(self, to: x, on: surface, now: t.now)
         } else {
             state = .idle(until: t.now + Double.random(in: 2...5))
         }
@@ -845,6 +1047,8 @@ final class RobotAgent {
         case .tag(let id):
             state = .idle(until: t.now + Double.random(in: 1...3))
             crew?.tagged(id, by: self, now: t.now)
+        case .knock(let side):
+            startKnocking(facing: side, t)
         case .cross(let screen):
             let ground = t.world.ground(screen)
             support = .ground(screen.id)
@@ -859,9 +1063,21 @@ final class RobotAgent {
         }
     }
 
-    /// Its session waits for you: comes to the screen the pointer is on
+    /// Its session waits for you: knocks on its terminal's window when it is on the screen the pointer is on,
+    /// otherwise comes to the pointer
     private func goToUser(_ t: Tick) {
         guard let crew, let screen = t.world.nearestScreen(to: t.mouse) else { return }
+        if let (x, side) = knockSpot(on: screen, t) {
+            let ground = t.world.ground(screen)
+            if support != ground.support {
+                state = .beamOut(start: t.now, to: Destination(support: ground.support, foot: CGPoint(x: x, y: ground.y)))
+            } else if abs(x - foot.x) < 4 {
+                startKnocking(facing: side, t)
+            } else {
+                walk(to: x, then: .knock(side))
+            }
+            return
+        }
         let here = t.world.screen(containing: CGPoint(x: foot.x, y: foot.y + 1))
         if here?.id == screen.id, let surface = currentSurface(t.world) {
             let x = min(max(t.mouse.x, surface.minX + halfWidth), max(surface.minX + halfWidth, surface.maxX - halfWidth))
@@ -877,6 +1093,80 @@ final class RobotAgent {
         }
     }
 
+    /// Where to stand to knock on its terminal's frontmost window on that screen, and which way to face:
+    /// beside a side that comes down to the ground, otherwise in front of the window
+    private func knockSpot(on screen: RobotWorld.Screen, _ t: Tick) -> (CGFloat, CGFloat)? {
+        guard let session, let app = TerminalFocus.hostApp(of: session) else { return nil }
+        t.world.refreshWindows(maxAge: 0.5)
+        guard let window = t.world.windows.first(where: { $0.owner == app.processIdentifier }),
+              screen.frame.contains(CGPoint(x: window.frame.midX, y: window.frame.midY)) else { return nil }
+        let ground = t.world.ground(screen), f = window.frame
+        // Its window must come down to the robot
+        guard f.minY <= ground.y + height * 0.5, f.maxY >= ground.y + height else { return nil }
+        let lo = ground.minX + halfWidth, hi = ground.maxX - halfWidth
+        guard lo < hi else { return nil }
+        let sides = [(f.minX - rig.reach, CGFloat(1)), (f.maxX + rig.reach, CGFloat(-1))].filter { lo...hi ~= $0.0 }
+        if let side = sides.min(by: { abs($0.0 - foot.x) < abs($1.0 - foot.x) }) { return side }
+        // On the glass, near the pointer
+        let x = min(max(t.mouse.x, max(lo, f.minX + halfWidth)), min(hi, max(lo, f.maxX - halfWidth)))
+        return (x, t.mouse.x >= x ? 1 : -1)
+    }
+
+    private func startKnocking(facing side: CGFloat, _ t: Tick) {
+        facing = side
+        state = .knock(until: t.now + 5)
+        if nextKnock < t.now { nextKnock = t.now + 0.15 }
+    }
+
+    // MARK: Subagents
+
+    /// One small robot per running subagent of its session, at most six
+    private func syncMinis(_ t: Tick) {
+        if isStanding, let surface = currentSurface(t.world) {
+            let margin = halfWidth * MiniBot.size + 4
+            minisBounds = (surface.minX + margin)...max(surface.minX + margin, surface.maxX - margin)
+        }
+        let running = (session?.agents ?? []).prefix(6).map(\.id)
+        for mini in minis where !running.contains(mini.id) { mini.leaving = true }
+        for id in running where !minis.contains(where: { $0.id == id }) {
+            let mini = MiniBot(id: id, genome: rig.genome, x: foot.x, scale: scale)
+            minisLayer.addSublayer(mini.rig.layer)
+            minis.append(mini)
+        }
+    }
+
+    /// They run around it while it stands; climbing, falling or carried, they hide inside it
+    private func updateMinis(_ t: Tick) {
+        guard !minis.isEmpty else { return }
+        let out = isStanding && rig.beam < 1 && !isLeaving
+        if !out {
+            if minisOut {
+                minisOut = false
+                minisLayer.isHidden = true
+                minis.removeAll { mini in
+                    mini.reset(at: foot.x)
+                    if mini.leaving { mini.rig.layer.removeFromSuperlayer() }
+                    return mini.leaving
+                }
+            }
+            return
+        }
+        minisOut = true
+        minisLayer.isHidden = false
+        minisLayer.opacity = Float(1 - rig.beam)
+        let origin = panel.frame.origin
+        let bounds = minisBounds ?? (foot.x - 100)...(foot.x + 100)
+        let mood: Mood = self.mood == .happy || self.mood.tint == .error ? self.mood : .focused
+        for mini in minis {
+            mini.update(now: t.now, dt: t.dt, home: foot.x, bounds: bounds, mood: mood)
+            mini.place(foot: CGPoint(x: mini.x - origin.x, y: foot.y - origin.y))
+        }
+        minis.removeAll { mini in
+            if mini.isGone { mini.rig.layer.removeFromSuperlayer() }
+            return mini.isGone
+        }
+    }
+
     private func swapRig(_ seed: UInt64) {
         pendingSeed = nil
         rig.layer.removeFromSuperlayer()
@@ -887,6 +1177,11 @@ final class RobotAgent {
         rope.strokeColor = rig.genome.accent.shaded(0.85).cg()
         lastFace = nil
         animator = FaceAnimator(mood: lastMood ?? .neutral)
+        rig.setOutfit(outfit)
+        rig.setTeam(team)
+        // Its subagents change too
+        minis.forEach { $0.rig.layer.removeFromSuperlayer() }
+        minis.removeAll()
     }
 
     // MARK: Drawing
@@ -900,7 +1195,8 @@ final class RobotAgent {
         // Climbing, the robot turns around its foot
         var needed = abs(rig.orientation) > 0.1
             ? CGRect(x: foot.x - r, y: foot.y - r, width: r * 2, height: r * 2)
-            : CGRect(origin: CGPoint(x: foot.x - RobotRig.foot.x, y: foot.y - RobotRig.foot.y), size: RobotRig.canvasSize)
+            : CGRect(x: foot.x - RobotRig.foot.x, y: foot.y - RobotRig.foot.y - Self.legroom,
+                     width: RobotRig.canvasSize.width, height: RobotRig.canvasSize.height + Self.legroom + Self.headroom)
         // The hook's anchor must be on stage too
         if let world, case .ascend(_, let wall) = state, let window = world.window(wall.window) {
             needed = needed.union(CGRect(x: wall.x(in: window.frame) - 6, y: window.frame.maxY - 6, width: 12, height: 12))
@@ -908,8 +1204,9 @@ final class RobotAgent {
         if !panel.frame.contains(needed) {
             var stage = needed
             if let world, isStanding, let surface = currentSurface(world) {
-                stage = CGRect(x: surface.minX - RobotRig.foot.x, y: surface.y - RobotRig.foot.y,
-                               width: surface.maxX - surface.minX + RobotRig.canvasSize.width, height: RobotRig.canvasSize.height).union(needed)
+                stage = CGRect(x: surface.minX - RobotRig.foot.x, y: surface.y - RobotRig.foot.y - Self.legroom,
+                               width: surface.maxX - surface.minX + RobotRig.canvasSize.width,
+                               height: RobotRig.canvasSize.height + Self.legroom + Self.headroom).union(needed)
             } else if let world, case .ascend(_, let wall) = state, let window = world.window(wall.window) {
                 // The whole way up: beside the wall, over it, on top of it
                 let x = wall.x(in: window.frame)
@@ -958,15 +1255,26 @@ final class RobotAgent {
             scale = panel.backingScaleFactor
             rig.setContentsScale(scale)
             rope.contentsScale = scale
+            minis.forEach { $0.rig.setContentsScale(scale) }
         }
     }
 
-    private func updateFace(_ mood: Mood, _ now: CFTimeInterval) {
+    private func updateFace(_ mood: Mood, _ t: Tick) {
         guard panel.occlusionState.contains(.visible) else { return }
-        let face = animator.frame(for: mood, color: session?.look.color, at: now)
+        animator.lookAt = gaze(toward: t.mouse)
+        animator.dizzyUntil = dizzyUntil
+        // Petted, it squints with pleasure
+        let shown = t.now < petUntil && mood != .waiting && mood != .sleepy ? Mood.happy : mood
+        let face = animator.frame(for: shown, color: session?.look.color, at: t.now)
         if let lastFace, face.isClose(to: lastFace) { return }
         rig.face.apply(face, in: rig.faceRect)
         lastFace = face
+    }
+
+    /// Its eyes follow the pointer when it comes close, in face units
+    private func gaze(toward mouse: CGPoint) -> CGPoint? {
+        guard isStanding, mood != .sleepy, abs(rig.orientation) < 0.1, rig.beam == 0 else { return nil }
+        return rig.gaze(at: mouse, foot: foot, facing: facing, sitting: isSitting)
     }
 
     /// Turning around and pose changes are animated
@@ -982,23 +1290,30 @@ final class RobotAgent {
         case .fall, .carried: motion = .fall
         case .cheer: motion = .cheer
         case .sleep: motion = .sleep
+        case .sit: motion = .sit
+        case .knock: motion = .knock
+        case .dizzy: motion = .dizzy
         default: motion = .idle
         }
+        // Tools only in its hands while it stands awake
+        rig.setProp(isStanding && !isAsleep ? shownProp : nil)
         rig.setMotion(motion)
-        if rig.showsShadow != isStanding { rig.showsShadow = isStanding }
+        let shadow = isStanding && !isSitting
+        if rig.showsShadow != shadow { rig.showsShadow = shadow }
     }
 
     /// The robot's drawn area on screen
     private var worldBounds: CGRect {
-        var e = rig.extent
-        if facing < 0 { e = CGRect(x: -e.maxX, y: e.minY, width: e.width, height: e.height) }
-        let angle = rig.orientation
-        guard abs(angle) > 0.01 else { return e.offsetBy(dx: foot.x, dy: foot.y) }
-        let c = cos(angle), s = sin(angle)
-        let corners = [CGPoint(x: e.minX, y: e.minY), CGPoint(x: e.maxX, y: e.minY), CGPoint(x: e.minX, y: e.maxY), CGPoint(x: e.maxX, y: e.maxY)]
-            .map { CGPoint(x: foot.x + $0.x * c - $0.y * s, y: foot.y + $0.x * s + $0.y * c) }
-        let xs = corners.map(\.x), ys = corners.map(\.y)
-        return CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
+        rig.bounds(foot: foot, facing: facing, sitting: isSitting)
+    }
+
+    /// Slow pointer moves over it add up to a petting: hearts, a wiggle and a happy face.
+    /// A quick pass doesn't count.
+    private func notePetting(over: Bool, _ t: Tick) {
+        guard pet.note(t.mouse, over: over && isStanding && rig.beam == 0, dt: t.dt, now: t.now) else { return }
+        petUntil = t.now + 2.2
+        rig.burst(.hearts)
+        rig.wiggle()
     }
 
     /// Clicks only land on the robot itself: the rest of its window lets them through.
@@ -1009,6 +1324,7 @@ final class RobotAgent {
         let over = bounds.contains(t.mouse)
         let ignores = isLeaving || !(over || carried)
         if panel.ignoresMouseEvents != ignores { panel.ignoresMouseEvents = ignores }
+        notePetting(over: over && !carried, t)
 
         guard let session, !isLeaving, !carried, rig.beam == 0, over || mood == .waiting || t.now < bubbleUntil else {
             bubble.hide()
@@ -1016,6 +1332,83 @@ final class RobotAgent {
         }
         bubble.show(title: session.displayTitle, status: session.statusText(at: t.wallNow), color: mood.tint.color,
                     above: bounds, screen: t.world.nearestScreen(to: CGPoint(x: bounds.midX, y: bounds.midY)))
+    }
+}
+
+// MARK: - Pointer
+
+/// Back-and-forth moves of the pointer while a robot is carried: four turns within 1.2 s make it dizzy
+struct ShakeMeter {
+    private var from: CGPoint?
+    private var direction = CGVector.zero
+    private var turns: [CFTimeInterval] = []
+
+    mutating func start(at point: CGPoint) {
+        from = point
+        direction = .zero
+        turns = []
+    }
+
+    /// True once the pointer has turned back often enough
+    mutating func note(_ point: CGPoint, now: CFTimeInterval) -> Bool {
+        guard let from else { return false }
+        let move = CGVector(dx: point.x - from.x, dy: point.y - from.y)
+        let length = hypot(move.dx, move.dy)
+        guard length > 12 else { return false }
+        if move.dx * direction.dx + move.dy * direction.dy < 0 { turns.append(now) }
+        direction = CGVector(dx: move.dx / length, dy: move.dy / length)
+        self.from = point
+        turns.removeAll { now - $0 > 1.2 }
+        return turns.count >= 4
+    }
+}
+
+/// Slow pointer moves over a robot add up to a petting. A quick pass (over 900 pt/s) doesn't count.
+struct PetMeter {
+    private var amount: CGFloat = 0
+    private var last: CGPoint?
+    private var nextAt: CFTimeInterval = 0
+
+    /// True when the moves add up to a petting, at most every 3 s
+    mutating func note(_ mouse: CGPoint, over: Bool, dt: Double, now: CFTimeInterval) -> Bool {
+        let moved = last.map { hypot(mouse.x - $0.x, mouse.y - $0.y) } ?? 0
+        last = mouse
+        if moved / CGFloat(max(dt, 0.001)) > 900 {
+            amount = 0
+        } else if over {
+            amount += moved
+        } else {
+            amount = max(0, amount - CGFloat(dt) * 300)
+        }
+        guard amount > 300, now >= nextAt else { return false }
+        amount = 0
+        nextAt = now + 3
+        return true
+    }
+}
+
+extension RobotRig {
+    /// Where its eyes look for a pointer at mouse (face units), nil when the pointer is over 260 pt away
+    func gaze(at mouse: CGPoint, foot: CGPoint, facing: CGFloat, sitting: Bool) -> CGPoint? {
+        let dx = mouse.x - foot.x
+        let dy = mouse.y - (foot.y + faceCenterY - (sitting ? sitDrop : 0))
+        guard hypot(dx, dy) < 260 else { return nil }
+        // The face is mirrored with the robot
+        return CGPoint(x: max(-1, min(1, dx / 150)) * 0.85 * facing, y: max(-1, min(1, dy / 150)) * 0.6)
+    }
+
+    /// Its drawn area, for its foot at foot in the same coordinates
+    func bounds(foot: CGPoint, facing: CGFloat, sitting: Bool) -> CGRect {
+        var e = extent
+        if facing < 0 { e = CGRect(x: -e.maxX, y: e.minY, width: e.width, height: e.height) }
+        if sitting { e = e.offsetBy(dx: 0, dy: -sitDrop) }
+        let angle = orientation
+        guard abs(angle) > 0.01 else { return e.offsetBy(dx: foot.x, dy: foot.y) }
+        let c = cos(angle), s = sin(angle)
+        let corners = [CGPoint(x: e.minX, y: e.minY), CGPoint(x: e.maxX, y: e.minY), CGPoint(x: e.minX, y: e.maxY), CGPoint(x: e.maxX, y: e.maxY)]
+            .map { CGPoint(x: foot.x + $0.x * c - $0.y * s, y: foot.y + $0.x * s + $0.y * c) }
+        let xs = corners.map(\.x), ys = corners.map(\.y)
+        return CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
     }
 }
 

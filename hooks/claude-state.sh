@@ -24,6 +24,7 @@ progressDir="${TMPDIR:-/tmp}/claude-ghostty-progress"
 refreshEvery=10   # seconds, must stay below Ghostty's 15s timeout
 doneDelay=4       # seconds the "done" bar stays visible
 maxIdle=1800      # seconds without any hook event before giving up (except while waiting)
+maxAgentAge=2700  # seconds after which a subagent that never reported its end is forgotten
 
 # Sets sequence, the OSC 9;4 parameters for a state
 sequenceFor() {
@@ -164,6 +165,8 @@ done
   read -r cwdJson
   read -r toolJson
   read -r commandJson
+  read -r agentId
+  read -r agentType
 } < <(jq -r '
   def json: if . == null or . == "" then "null" else tostring | tojson end;
   def lineCount: (. // "") | tostring | split("\n") | length;
@@ -222,7 +225,8 @@ done
   (.hook_event_name // "" | tostring), (.session_id // "" | tostring), (.tool_name // "" | tostring),
   (.notification_type // "" | tostring), (.trigger // "" | tostring), signal,
   (.cwd | json), (.tool_name | json),
-  (if .tool_name == "Bash" then .tool_input.command // "" | tostring | .[0:160] else null end | json)
+  (if .tool_name == "Bash" then .tool_input.command // "" | tostring | .[0:160] else null end | json),
+  (.agent_id // "" | tostring), (.agent_type // "" | tostring)
 ')
 
 # The id names a file: refuse anything else than a plain id
@@ -256,11 +260,40 @@ case "$event" in
     state=failed ;;
   SessionEnd)
     state=ended ;;
+  SubagentStop)
+    state="" ;;   # only the list of running subagents changes
   *)
     exit 0 ;;
 esac
 
 now=$(date +%s)
+
+# Running subagents, one line each: "<agent id> <start time> <agent type>", in <session id>.agents.
+# An interrupted subagent may never report its end: entries older than maxAgentAge are dropped.
+updateAgents() {
+  local file="$sessionsDir/$sessionId.agents" id since type kept=""
+  case "$event" in
+    SessionStart | SessionEnd) [ -e "$file" ] && rm -f "$file"; return ;;
+    SubagentStart | SubagentStop) ;;
+    *) return ;;
+  esac
+  case "$agentId" in "" | *[!A-Za-z0-9_-]*) return ;; esac
+  case "$agentType" in "" | *[!A-Za-z0-9_.:-]*) agentType=agent ;; esac
+  if [ -r "$file" ]; then
+    while read -r id since type; do
+      case "$since" in "" | *[!0-9]*) continue ;; esac
+      [ "$id" != "$agentId" ] && [ $(( now - since )) -lt "$maxAgentAge" ] && kept+="$id $since $type"$'\n'
+    done < "$file"
+  fi
+  [ "$event" = "SubagentStart" ] && kept+="$agentId $now $agentType"$'\n'
+  if [ -z "$kept" ]; then
+    [ -e "$file" ] && rm -f "$file"
+    return
+  fi
+  [ -d "$sessionsDir" ] || mkdir -p "$sessionsDir"
+  # Renamed into place: the app watches the folder, not the files
+  printf '%s' "$kept" > "$file.$$" && mv -f "$file.$$" "$file"
+}
 
 publishSession() {
   local file="$sessionsDir/$sessionId.json"
@@ -346,6 +379,8 @@ updateProgress() {
   fi
 }
 
+updateAgents
+[ -n "$state" ] || exit 0
 publishSession
 updateProgress
 exit 0

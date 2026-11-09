@@ -189,6 +189,13 @@ enum RobotMotion {
     case idle, walk, cheer, sleep, fall
     /// Climbing: flying up, hanging from a rope, aiming the hook, hand over hand, bouncing off a wall
     case fly, hang, aim, climb, bounce
+    /// Sitting on a window's edge with its legs dangling, reeling after a shake, knocking on a window
+    case sit, dizzy, knock
+}
+
+/// How it holds its arms besides its motion: a tool raised in its hand, or typing on a keyboard
+enum ArmPose {
+    case rest, hold, typing
 }
 
 /// Core Animation layers built once from a genome. Motions are repeating CA animations
@@ -209,13 +216,14 @@ final class RobotRig {
     private let shadow = CAShapeLayer()
     private let mount = RobotRig.group()
     private let bot = RobotRig.group()
-    private let hopper = RobotRig.group()
-    private let torso = RobotRig.group()
-    private let head = RobotRig.group()
+    let hopper = RobotRig.group()
+    let torso = RobotRig.group()
+    let head = RobotRig.group()
     private var spinners: [(layer: CALayer, radius: CGFloat)] = []
     private var treads: [CAShapeLayer] = []
     private var legs: [(layer: CALayer, phase: Double, rest: CGFloat)] = []
-    private var arms: [(layer: CALayer, rest: CGFloat)] = []
+    /// side: -1 on its left, +1 on its right (the last one)
+    private(set) var arms: [(layer: CALayer, rest: CGFloat, side: CGFloat)] = []
     private var antennas: [CALayer] = []
     private var blade: CALayer?
     private var coil: CALayer?
@@ -225,11 +233,39 @@ final class RobotRig {
     private let emoteBubble = CALayer()
     private let emoteText = CATextLayer()
     /// Top of the head, in foot coordinates
-    private var headTop: CGFloat = 0
+    private(set) var headTop: CGFloat = 0
+    /// Center of its face above the foot
+    private(set) var faceCenterY: CGFloat = 0
+    /// How far its hand reaches sideways from its center: where it stands to knock on a window
+    private(set) var reach: CGFloat = 0
+    /// Resolution of its layers, for the ones added later
+    private(set) var contentsScale: CGFloat = 2
+
+    // Gear, built on demand (RobotGear.swift)
+    var prop: RobotProp?
+    var propLayer: CALayer?
+    var outfit = RobotOutfit()
+    var outfitLayers: [CALayer] = []
+    var teamFlag: CALayer?
+    var teamLetter: CALayer?
+    var stars: CALayer?
+
+    static let knockPeriod = 1.6
+
+    var armPose = ArmPose.rest {
+        didSet { if armPose != oldValue { applyArmPose() } }
+    }
+
+    /// Lowered by that much when sitting: its body rests on the edge
+    var sitDrop: CGFloat { max(0, torso.position.y - 3) }
 
     /// 1 faces right, -1 faces left. The flip is animated: the robot turns around
     var facing: CGFloat = 1 {
-        didSet { bot.transform = CATransform3DMakeScale(facing, 1, 1) }
+        didSet {
+            bot.transform = CATransform3DMakeScale(facing, 1, 1)
+            // Mirrored twice: its team letter reads the right way
+            teamLetter?.transform = CATransform3DMakeScale(facing, 1, 1)
+        }
     }
 
     /// Rotation around the foot: 0 upright, π/2 climbing a wall on its right, -π/2 on its left
@@ -253,6 +289,8 @@ final class RobotRig {
         build()
         extent = Self.drawnBounds(of: bot, in: bot)
         headTop = head.convert(CGPoint(x: 0, y: genome.headSize.height), to: bot).y
+        faceCenterY = head.convert(CGPoint(x: 0, y: genome.headSize.height / 2), to: bot).y
+        if arms.isEmpty { reach = genome.headSize.width / 2 }
         buildEmote()
     }
 
@@ -275,7 +313,7 @@ final class RobotRig {
 
     // MARK: Building
 
-    private static func group(at p: CGPoint = .zero) -> CALayer {
+    static func group(at p: CGPoint = .zero) -> CALayer {
         let layer = CALayer()
         // Tiny bounds centered on the origin: the anchor point is the local origin, so the layer rotates around it
         layer.bounds = CGRect(x: -1, y: -1, width: 2, height: 2)
@@ -283,7 +321,7 @@ final class RobotRig {
         return layer
     }
 
-    private func shape(_ path: CGPath, fill: CGColor?, stroke: CGColor? = nil, width: CGFloat = 1.4,
+    func shape(_ path: CGPath, fill: CGColor?, stroke: CGColor? = nil, width: CGFloat = 1.4,
                        at p: CGPoint = .zero) -> CAShapeLayer {
         let layer = CAShapeLayer()
         layer.bounds = CGRect(x: -1, y: -1, width: 2, height: 2)
@@ -319,11 +357,11 @@ final class RobotRig {
     }
 
     /// Filled part with a darker outline
-    private func part(_ path: CGPath, _ color: RobotColor, at p: CGPoint = .zero) -> CAShapeLayer {
+    func part(_ path: CGPath, _ color: RobotColor, at p: CGPoint = .zero) -> CAShapeLayer {
         shape(path, fill: color.cg(), stroke: color.outline, at: p)
     }
 
-    private func line(_ points: [CGPoint], _ color: CGColor, width: CGFloat) -> CAShapeLayer {
+    func line(_ points: [CGPoint], _ color: CGColor, width: CGFloat) -> CAShapeLayer {
         let path = CGMutablePath()
         path.addLines(between: points)
         return shape(path, fill: nil, stroke: color, width: width)
@@ -532,8 +570,10 @@ final class RobotRig {
             let rest = side * 0.5
             arm.transform = CATransform3DMakeRotation(rest, 0, 0, 1)
             torso.addSublayer(arm)
-            arms.append((arm, rest))
+            arms.append((arm, rest, side))
         }
+        // Raised level, its hand touches what is right beside it
+        reach = edge - 1.5 + len + 2
     }
 
     private func buildChest() {
@@ -755,7 +795,7 @@ final class RobotRig {
         }
     }
 
-    private func roundedRect(_ rect: CGRect, _ radius: CGFloat) -> CGPath {
+    func roundedRect(_ rect: CGRect, _ radius: CGFloat) -> CGPath {
         let r = min(radius, rect.width / 2, rect.height / 2)
         return CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil)
     }
@@ -773,7 +813,7 @@ final class RobotRig {
         return p
     }
 
-    private func roundedPolygon(_ points: [CGPoint], radius: CGFloat) -> CGPath {
+    func roundedPolygon(_ points: [CGPoint], radius: CGFloat) -> CGPath {
         let p = CGMutablePath()
         let last = points[points.count - 1]
         p.move(to: CGPoint(x: (last.x + points[0].x) / 2, y: (last.y + points[0].y) / 2))
@@ -803,6 +843,7 @@ final class RobotRig {
     // MARK: Motions
 
     func setContentsScale(_ scale: CGFloat) {
+        contentsScale = scale
         func apply(_ layer: CALayer) {
             layer.contentsScale = scale
             layer.sublayers?.forEach(apply)
@@ -810,24 +851,54 @@ final class RobotRig {
         apply(layer)
     }
 
-    func setMotion(_ next: RobotMotion) {
-        guard next != motion else { return }
+    /// force: starts it over, after a change of arm pose
+    func setMotion(_ next: RobotMotion, force: Bool = false) {
+        guard force || next != motion else { return }
         motion = next
         for (layer, key) in motionKeys { layer.removeAnimation(forKey: key) }
         motionKeys.removeAll()
 
         // Resting pose, animated by the implicit actions
         head.transform = next == .sleep ? CATransform3DTranslate(CATransform3DMakeRotation(-0.1, 0, 0, 1), 0, -2, 0) : CATransform3DIdentity
+        hopper.transform = next == .sit ? CATransform3DMakeTranslation(0, -sitDrop, 0) : CATransform3DIdentity
         for arm in arms {
             arm.layer.transform = CATransform3DMakeRotation(armAngle(arm.rest, next), 0, 0, 1)
         }
 
         if next == .aim, let arm = arms.last {
-            arm.layer.transform = CATransform3DMakeRotation(arm.rest + 2.2, 0, 0, 1)
+            arm.layer.transform = CATransform3DMakeRotation(arm.side * 0.5 + 2.2, 0, 0, 1)
+        }
+        if next == .knock, let arm = arms.last {
+            arm.layer.transform = CATransform3DMakeRotation(arm.side * 0.5 + 0.55, 0, 0, 1)
         }
 
         switch next {
-        case .idle, .aim: break
+        case .aim: break
+        case .idle: typeOnKeyboard()
+        case .sit:
+            dangleLegs(amount: 0.35, duration: 1.8)
+            loop(torso, "transform.scale.y", values: [1, 1.025, 1], duration: 3.6, fps: 12)
+            typeOnKeyboard()
+        case .dizzy:
+            loop(hopper, "transform.rotation.z", values: [-0.13, 0.13, -0.13], duration: 1.1)
+            loop(head, "transform.rotation.z", values: [0.12, -0.12, 0.12], duration: 0.8)
+            for (i, arm) in arms.enumerated() {
+                let rest = Double(arm.rest)
+                loop(arm.layer, "transform.rotation.z", values: [rest - 0.4, rest + 0.4, rest - 0.4], duration: 0.9, phase: Double(i) * 0.5)
+            }
+            dangleLegs(amount: 0.25, duration: 1.1)
+            swayAntennas(amount: 0.35, duration: 0.55)
+        case .knock:
+            // Two quick knocks, then a pause
+            let keyTimes: [NSNumber] = [0, 0.08, 0.16, 0.24, 0.32, 1]
+            if let arm = arms.last {
+                let low = Double(arm.side * 0.5 + 0.55), hit = Double(arm.side * 0.5 + 1.1)
+                loop(arm.layer, "transform.rotation.z", values: [low, hit, low, hit, low, low], keyTimes: keyTimes, duration: Self.knockPeriod)
+            } else {
+                // No arm: knocks with its head
+                loop(hopper, "transform.translation.x", values: [0, 4, 0, 4, 0, 0], keyTimes: keyTimes, duration: Self.knockPeriod)
+            }
+            swayAntennas(amount: 0.1, duration: 0.8)
         case .walk: walk()
         case .cheer: cheer()
         case .fly: fly()
@@ -890,14 +961,40 @@ final class RobotRig {
         once(hopper, "transform.scale.y", values: [0.75, 1.08, 0.97, 1], duration: 0.4, timing: .easeOut)
     }
 
+    private func applyArmPose() {
+        for i in arms.indices {
+            arms[i].rest = arms[i].side * 0.5 + (armPose == .hold && i == arms.count - 1 ? 1.25 : 0)
+        }
+        setMotion(motion, force: true)
+    }
+
+    /// Hands tapping on the keyboard it holds
+    private func typeOnKeyboard() {
+        guard armPose == .typing else { return }
+        for (i, arm) in arms.enumerated() {
+            let rest = Double(arm.rest), tap = Double(arm.side) * 0.1
+            loop(arm.layer, "transform.rotation.z", values: [rest + tap / 2, rest - tap, rest + tap / 2], duration: 0.26, phase: Double(i) * 0.5)
+        }
+    }
+
     /// Two little jumps of joy
     func celebrate() {
         once(hopper, "transform.translation.y", values: [0, 10, 0, 6, 0], duration: 0.8,
              timings: [.easeOut, .easeIn, .easeOut, .easeIn])
         if let arm = arms.last {
-            let up = Double(arm.rest) + 2.3
-            once(arm.layer, "transform.rotation.z", values: [Double(arm.rest), up, up - 0.3, up, Double(arm.rest)], duration: 1)
+            let rest = Double(arm.side * 0.5), up = rest + 2.3
+            once(arm.layer, "transform.rotation.z", values: [rest, up, up - 0.3, up, rest], duration: 1)
         }
+    }
+
+    /// Wiggles with pleasure
+    func wiggle() {
+        once(torso, "transform.rotation.z", values: [0, 0.07, -0.07, 0.05, -0.05, 0], duration: 0.9)
+    }
+
+    /// A jolt, as from an electric shock
+    func jolt() {
+        once(bot, "transform.translation.x", values: [0, -2.5, 2.5, -2, 2, 0], duration: 0.4)
     }
 
     /// Waves at another robot, or hops when it has no arm
@@ -906,12 +1003,12 @@ final class RobotRig {
             once(hopper, "transform.translation.y", values: [0, 6, 0], duration: 0.45, timings: [.easeOut, .easeIn])
             return
         }
-        let rest = Double(arm.rest), up = rest + 2.3
+        let rest = Double(arm.side * 0.5), up = rest + 2.3
         once(arm.layer, "transform.rotation.z", values: [rest, up, up - 0.45, up, up - 0.45, up, rest], duration: 1.4)
     }
 
     enum Emote {
-        case exclaim, question, heart, note, sleep
+        case exclaim, question, heart, note, sleep, knock
 
         var text: String {
             switch self {
@@ -920,6 +1017,7 @@ final class RobotRig {
             case .heart: return "♥"
             case .note: return "♪"
             case .sleep: return "z"
+            case .knock: return "toc"
             }
         }
 
@@ -930,9 +1028,12 @@ final class RobotRig {
             case .heart: return CGColor(srgbRed: 1, green: 0.25, blue: 0.45, alpha: 1)
             case .note: return CGColor(srgbRed: 0.15, green: 0.72, blue: 0.4, alpha: 1)
             case .sleep: return CGColor(srgbRed: 0.5, green: 0.45, blue: 0.9, alpha: 1)
+            case .knock: return CGColor(srgbRed: 0.55, green: 0.35, blue: 0.2, alpha: 1)
             }
         }
     }
+
+    private static let emoteFont = NSFont.systemFont(ofSize: 13, weight: .heavy)
 
     private func buildEmote() {
         emoteBubble.bounds = CGRect(x: 0, y: 0, width: 20, height: 18)
@@ -943,7 +1044,7 @@ final class RobotRig {
         emoteBubble.opacity = 0
         emoteText.frame = CGRect(x: 0, y: 0, width: 20, height: 17)
         emoteText.alignmentMode = .center
-        emoteText.font = NSFont.systemFont(ofSize: 13, weight: .heavy)
+        emoteText.font = Self.emoteFont
         emoteText.fontSize = 13
         emoteBubble.addSublayer(emoteText)
         layer.addSublayer(emoteBubble)
@@ -955,7 +1056,10 @@ final class RobotRig {
         CATransaction.setDisableActions(true)
         emoteText.string = emote.text
         emoteText.foregroundColor = emote.color
-        emoteBubble.position = CGPoint(x: Self.foot.x + side * (genome.headSize.width / 2 + 9), y: Self.foot.y + headTop - 2)
+        let width = max(20, ceil((emote.text as NSString).size(withAttributes: [.font: Self.emoteFont]).width) + 10)
+        emoteBubble.bounds = CGRect(x: 0, y: 0, width: width, height: 18)
+        emoteText.frame = CGRect(x: 0, y: 0, width: width, height: 17)
+        emoteBubble.position = CGPoint(x: Self.foot.x + side * (genome.headSize.width / 2 + width / 2 - 1), y: Self.foot.y + headTop - 2)
         CATransaction.commit()
         let fade = keyframes("opacity", values: [0, 1, 1, 0], keyTimes: [0, 0.08, 0.85, 1], duration: 1.9, timing: .linear, timings: nil, fps: 24)
         emoteBubble.add(fade, forKey: "emote.opacity")
@@ -1029,7 +1133,7 @@ final class RobotRig {
     private func cheer() {
         hop(height: genome.locomotion == .hover ? 6 : 8, duration: 1.1, pause: 0.6)
         if let arm = arms.last {
-            let up = Double(arm.rest) + 2.35
+            let up = Double(arm.side * 0.5) + 2.35
             loop(arm.layer, "transform.rotation.z", values: [up - 0.25, up + 0.25, up - 0.25], duration: 0.5)
         }
         swayAntennas(amount: 0.2, duration: 0.4)
@@ -1060,11 +1164,14 @@ final class RobotRig {
 
     /// Short one-shot gesture while idle: keeps the robot alive without a running animation
     func fidget() {
-        guard motion == .idle else { return }
+        guard motion == .idle || motion == .sit else { return }
         var options: [() -> Void] = [
             { self.once(self.head, "transform.rotation.z", values: [0, 0.12, 0.12, 0], duration: 1.4) },
-            { self.once(self.hopper, "transform.translation.y", values: [0, 5, 0], duration: 0.42, timings: [.easeOut, .easeIn]) },
         ]
+        // Seated, a hop would stand it up for a moment
+        if motion == .idle {
+            options.append { self.once(self.hopper, "transform.translation.y", values: [0, 5, 0], duration: 0.42, timings: [.easeOut, .easeIn]) }
+        }
         if !antennas.isEmpty {
             options.append {
                 for antenna in self.antennas {
@@ -1072,7 +1179,7 @@ final class RobotRig {
                 }
             }
         }
-        if let arm = arms.last {
+        if let arm = arms.last, armPose == .rest {
             let rest = Double(arm.rest)
             options.append { self.once(arm.layer, "transform.rotation.z", values: [rest, rest + 1.3, rest + 0.9, rest + 1.3, rest], duration: 1.3) }
         }
@@ -1084,7 +1191,7 @@ final class RobotRig {
 
     // MARK: Animation helpers
 
-    private func keyframes(_ keyPath: String, values: [Any], keyTimes: [NSNumber]?, duration: Double,
+    func keyframes(_ keyPath: String, values: [Any], keyTimes: [NSNumber]?, duration: Double,
                            timing: CAMediaTimingFunctionName, timings: [CAMediaTimingFunctionName]?, fps: Float) -> CAKeyframeAnimation {
         let animation = CAKeyframeAnimation(keyPath: keyPath)
         animation.values = values
@@ -1111,7 +1218,7 @@ final class RobotRig {
         motionKeys.append((layer, key))
     }
 
-    private func once(_ layer: CALayer, _ keyPath: String, values: [Any], duration: Double,
+    func once(_ layer: CALayer, _ keyPath: String, values: [Any], duration: Double,
                       timing: CAMediaTimingFunctionName = .easeInEaseOut, timings: [CAMediaTimingFunctionName]? = nil) {
         let animation = keyframes(keyPath, values: values, keyTimes: nil, duration: duration, timing: timing, timings: timings, fps: 24)
         layer.add(animation, forKey: "fidget." + keyPath)

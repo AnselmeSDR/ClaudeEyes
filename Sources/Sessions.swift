@@ -48,9 +48,17 @@ struct LiveStatus: Decodable, Equatable {
     var isWaitingForUser: Bool { status == "waiting" && waitingFor != "dialog open" }
 }
 
+/// A subagent running for a session, from the hook's <session id>.agents file
+struct Subagent: Equatable {
+    let id: String
+    let type: String
+    let since: Double
+}
+
 struct Session: Identifiable, Equatable {
     let record: SessionRecord
     var live: LiveStatus?
+    var agents: [Subagent] = []
 
     /// Keyed by process so a session keeps its face when its first hook arrives or after /clear
     var id: String {
@@ -89,6 +97,23 @@ struct Session: Identifiable, Equatable {
     private var isCheckCommand: Bool {
         guard let command = record.command else { return false }
         return Self.checkPattern.firstMatch(in: command, range: NSRange(command.startIndex..., in: command)) != nil
+    }
+
+    /// What its robot holds while a tool runs
+    var prop: RobotProp? {
+        guard state == .working, record.event == "PreToolUse", let tool = record.tool else { return nil }
+        if Self.exploreTools.contains(tool) || tool.hasPrefix("mcp__") { return .magnifier }
+        if Self.writeTools.contains(tool) { return .keyboard }
+        if tool == "Bash" { return isCheckCommand ? .testTube : .wrench }
+        return nil
+    }
+
+    private var agentsText: String? {
+        switch agents.count {
+        case 0: return nil
+        case 1: return "un agent au travail"
+        default: return "\(agents.count) agents au travail"
+        }
     }
 
     func mood(at now: Double) -> Mood {
@@ -173,7 +198,7 @@ struct Session: Identifiable, Equatable {
             switch mood {
             case .happy: return "terminé"
             case .sleepy: return "endormi"
-            default: return "en attente"
+            default: return agentsText ?? "en attente"
             }
         case .working:
             switch mood {
@@ -183,8 +208,8 @@ struct Session: Identifiable, Equatable {
             case .focused:
                 switch record.tool {
                 case "Bash": return "lance une commande"
-                case let tool? where Self.agentTools.contains(tool): return "délègue à un agent"
-                case nil where record.event == "SubagentStart": return "délègue à un agent"
+                case let tool? where Self.agentTools.contains(tool): return agentsText ?? "délègue à un agent"
+                case nil where record.event == "SubagentStart": return agentsText ?? "délègue à un agent"
                 default: return "écrit du code"
                 }
             case .nervous: return "lance les vérifications"
@@ -300,12 +325,35 @@ final class SessionStore: ObservableObject {
             .sorted { (live[$0]?.record.stateSince ?? 0) < (live[$1]?.record.stateSince ?? 0) }
         order += newIds
 
+        let agents = runningAgents(files, now: now)
         var next = order.compactMap { live[$0] }
         for index in next.indices {
             next[index].live = liveStatus(pid: next[index].record.pid)
+            next[index].agents = agents[next[index].record.sessionId] ?? []
         }
         watchRegistries(pids: next.compactMap(\.record.pid))
         if next != sessions { sessions = next }
+    }
+
+    /// Subagents listed by the hook, by session id. A list whose session file is gone is removed.
+    private func runningAgents(_ files: [URL], now: Double) -> [String: [Subagent]] {
+        let sessionIds = Set(files.filter { $0.pathExtension == "json" }.map { $0.deletingPathExtension().lastPathComponent })
+        var result: [String: [Subagent]] = [:]
+        for file in files where file.pathExtension == "agents" {
+            let sessionId = file.deletingPathExtension().lastPathComponent
+            guard sessionIds.contains(sessionId) else {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+            result[sessionId] = text.split(separator: "\n").compactMap { line in
+                let parts = line.split(separator: " ")
+                // Same limit as the hook: an interrupted subagent may never report its end
+                guard parts.count >= 2, let since = Double(parts[1]), now - since < 2700 else { return nil }
+                return Subagent(id: String(parts[0]), type: parts.count > 2 ? String(parts[2]) : "agent", since: since)
+            }
+        }
+        return result
     }
 
     private func liveStatus(pid: Int32?) -> LiveStatus? {
@@ -356,6 +404,27 @@ final class SessionStore: ObservableObject {
     }
 
     var waitingCount: Int { sessions.filter { $0.state == .waiting }.count }
+}
+
+/// The repository a working directory belongs to: sessions in the same one form a team of robots
+enum ProjectRoot {
+    private static var cache: [String: String] = [:]
+
+    static func of(_ cwd: String?) -> String? {
+        guard let cwd, !cwd.isEmpty else { return nil }
+        if let root = cache[cwd] { return root }
+        var url = URL(fileURLWithPath: cwd)
+        var root = cwd
+        while url.path != "/" {
+            if FileManager.default.fileExists(atPath: url.appendingPathComponent(".git").path) {
+                root = url.path
+                break
+            }
+            url.deleteLastPathComponent()
+        }
+        cache[cwd] = root
+        return root
+    }
 }
 
 /// An interactive `claude` process found in the process table
