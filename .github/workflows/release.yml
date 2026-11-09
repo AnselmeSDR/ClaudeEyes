@@ -1,0 +1,77 @@
+name: Release
+
+# A version tag (v1.3) builds the app on a Mac and attaches ClaudeEyes-<version>.zip and its .sha256 to a draft
+# release whose notes come from CHANGELOG.md: review them, then publish. The in-app updater only sees published
+# releases. A tag with a suffix (v1.3-test1) makes a draft prerelease, to try the pipeline. A manual run only
+# builds the zip and keeps it as a workflow artifact.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the version
+        id: version
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tagVersion=${GITHUB_REF_NAME#v}
+            if [ "${tagVersion%%-*}" != "$version" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match version $version of Resources/Info.plist"
+              exit 1
+            fi
+          fi
+          xcodebuild -version
+
+      - name: Build
+        run: ./build.sh --zip
+
+      - name: Keep the zip
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeEyes-${{ steps.version.outputs.version }}
+          path: build/ClaudeEyes-*.zip*
+
+      - name: Draft the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # This version's CHANGELOG entries, without their heading
+          changes=$(awk -v heading="## $VERSION " 'index($0, heading) == 1 { on = 1; next } /^## / { on = 0 } on && (NF || started) { started = 1; print }' CHANGELOG.md)
+          if [ -z "$(echo "$changes" | tr -d '[:space:]')" ]; then
+            echo "::error::No entry for $VERSION in CHANGELOG.md"
+            exit 1
+          fi
+          cat > notes.md <<EOF
+          <!-- Before publishing: add a one-line intro and bold the lead of each bullet, the app shows those leads in its update alert. -->
+
+          ## What's new
+
+          $changes
+
+          ## Install
+
+          1. Download \`ClaudeEyes-$VERSION.zip\` below, unzip it and move **Claude Eyes** to your Applications folder.
+          2. Open it. The app is not notarized, so macOS blocks its first launch: click **Open Anyway** in **System Settings → Privacy & Security** (or run \`xattr -dr com.apple.quarantine "/Applications/Claude Eyes.app"\` once).
+          3. Accept the hook install. It needs [\`jq\`](https://jqlang.org) (\`brew install jq\`).
+
+          Already installed? The app offers this version by itself (menu bar → **Mettre à jour…**). From source: \`git pull\` and \`./build.sh --install\`.
+
+          Requires macOS 14 or later on Apple Silicon and Claude Code 2.1 or later. See the [README](https://github.com/AnselmeSDR/ClaudeEyes#readme) for details.
+          EOF
+          prerelease=()
+          [[ "$GITHUB_REF_NAME" == *-* ]] && prerelease=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" "build/ClaudeEyes-$VERSION.zip" "build/ClaudeEyes-$VERSION.zip.sha256" \
+            --draft "${prerelease[@]}" --verify-tag --title "Claude Eyes $VERSION" --notes-file notes.md
